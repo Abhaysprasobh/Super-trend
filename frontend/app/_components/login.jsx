@@ -36,7 +36,7 @@ function Login() {
 
           
           <div>
-            <label htmlFor="email" className="sr-only">Email</label>
+            <label htmlFor="email" className="sr-only">Email:</label>
             <input
               type="email"
               id="email"
@@ -49,7 +49,7 @@ function Login() {
           </div>
 
           <div>
-            <label htmlFor="password" className="sr-only">Password</label>
+            <label htmlFor="password" className="sr-only">Password:</label>
             <input
               type="password"
               id="password"
