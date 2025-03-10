@@ -4,6 +4,10 @@ sesID ,
 userType ,
 activity ,
 id INT AUTO_INCREMENT PRIMARY KEY,   --Foreign Key
+
+
+
+
 );
 
 CREATE TABLE tokenmap(
