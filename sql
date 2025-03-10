@@ -32,7 +32,7 @@ CREATE TABLE users (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- Timestamp of when the account was created
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP -- Timestamp for when account was last updated
 );
-dsds
+
 
 -- Optionally, add an index on the email column to improve lookups:
 CREATE INDEX idx_email ON users (email);
