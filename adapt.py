@@ -1,84 +1,142 @@
-import yfinance as yf
-import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
+import pandas as pd
+import yfinance as yf
+from sklearn.model_selection import TimeSeriesSplit, GridSearchCV
+from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import (classification_report, confusion_matrix, 
+                             accuracy_score, ConfusionMatrixDisplay)
+from sklearn.inspection import permutation_importance
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-# List of stock tickers
-tickers = [
-    'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA', 'PYPL', 'ADBE', 'INTC',
-    'NFLX', 'CMCSA', 'PEP', 'COST', 'TMUS', 'AVGO', 'TXN', 'QCOM', 'SBUX', 'AMD'
-]
+# Download historical stock data
+ticker = 'AAPL'  # Example ticker
+df = yf.download(ticker, start='2023-06-01', end='2023-12-31', progress=False)
 
-# Download historical OHLCV data for all tickers
-data = yf.download(tickers, period='2y', group_by='ticker')
+# Calculate logarithmic returns
+df['log_ret'] = np.log(df['Close']).diff()
 
-# Prepare features and calculate volatility
-features = pd.DataFrame(index=tickers)
-volatility_list = []
+# Calculate forward-looking volatility (target variable)
+volatility_window = 10  # Volatility calculation window in days
+df['future_vol'] = df['log_ret'].rolling(volatility_window).std().shift(-volatility_window)
 
-for ticker in tickers:
-    df = data[ticker]
+# Debug: print tail to verify future_vol values
+print("Before cleaning:")
+print(df[['log_ret', 'future_vol']].tail(20))
+
+# Ensure the future_vol column exists and drop the last volatility_window rows,
+# since these rows have NaN due to the shift.
+if 'future_vol' not in df.columns:
+    raise ValueError("Error: 'future_vol' column is missing.")
     
-    # Calculate daily returns and volatility (annualized)
-    returns = df['Close'].pct_change().dropna()
-    volatility = returns.std() * np.sqrt(252)
-    volatility_list.append(volatility)
+# Remove the last N rows, where N equals volatility_window
+df = df.iloc[:-volatility_window]
+
+# Double-check that future_vol no longer has NaN values
+if df['future_vol'].isnull().any():
+    raise ValueError("Error: NaN values are still present in 'future_vol' after cleaning!")
     
-    # Calculate average daily volume
-    avg_volume = df['Volume'].mean()
+print("Data cleaned successfully!")
+print("After cleaning:")
+print(df[['log_ret', 'future_vol']].tail(15))
+
+# Create volatility classes using quantiles
+df['label'] = pd.qcut(df['future_vol'], q=[0, 0.25, 0.75, 1], 
+                      labels=['low', 'medium', 'high'])
+
+# Feature Engineering
+def calculate_features(data):
+    # Historical volatility (20-day rolling)
+    data['hist_vol_20'] = data['log_ret'].rolling(20).std()
     
-    # Calculate average daily price range (High - Low)
-    avg_range = (df['High'] - df['Low']).mean()
+    # RSI (14-day period)
+    delta = data['Close'].diff()
+    gain = delta.where(delta > 0, 0)
+    loss = -delta.where(delta < 0, 0)
+    avg_gain = gain.rolling(14).mean()
+    avg_loss = loss.rolling(14).mean()
+    rs = avg_gain / avg_loss
+    data['rsi'] = 100 - (100 / (1 + rs))
     
-    # Calculate average daily return
-    avg_daily_return = returns.mean()
+    # MACD features
+    ema12 = data['Close'].ewm(span=12, adjust=False).mean()
+    ema26 = data['Close'].ewm(span=26, adjust=False).mean()
+    data['macd'] = ema12 - ema26
+    data['macd_signal'] = data['macd'].ewm(span=9, adjust=False).mean()
     
-    # Store features
-    features.loc[ticker, 'avg_volume'] = avg_volume
-    features.loc[ticker, 'avg_range'] = avg_range
-    features.loc[ticker, 'avg_daily_return'] = avg_daily_return
+    # Bollinger Bands features
+    sma20 = data['Close'].rolling(20).mean()
+    std20 = data['Close'].rolling(20).std()
+    data['bollinger_pct'] = (data['Close'] - (sma20 - 2 * std20)) / ((sma20 + 2 * std20) - (sma20 - 2 * std20))
+    
+    # Momentum features
+    data['momentum_10'] = data['Close'].pct_change(10)
+    data['volume_ma5'] = data['Volume'].rolling(5).mean()
+    
+    return data
 
-# Create labels based on volatility tertiles
-volatility_series = pd.Series(volatility_list, index=tickers)
-labels = pd.qcut(volatility_series, q=3, labels=['low', 'medium', 'high'])
+df = calculate_features(df)
+# Remove any remaining rows with NaN values from feature calculations
+df.dropna(inplace=True)
 
-# Drop any rows with missing values
-features = features.dropna()
+# Prepare features and target
+features = ['hist_vol_20', 'rsi', 'macd', 'macd_signal', 
+            'bollinger_pct', 'momentum_10', 'volume_ma5']
+X = df[features]
+y = LabelEncoder().fit_transform(df['label'])
 
-# Align labels with features
-labels = labels[features.index]
+# Time-based train-test split
+split_idx = int(0.8 * len(X))
+X_train, X_test = X.iloc[:split_idx], X.iloc[split_idx:]
+y_train, y_test = y[:split_idx], y[split_idx:]
 
-# Split data into training and testing sets
-X = features.values
-y = labels.cat.codes  # Convert categories to numerical codes
-
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42
-)
-
-# Standardize features
+# Feature scaling
 scaler = StandardScaler()
 X_train_scaled = scaler.fit_transform(X_train)
 X_test_scaled = scaler.transform(X_test)
 
-# Train KNN classifier
-knn = KNeighborsClassifier(n_neighbors=3)
-knn.fit(X_train_scaled, y_train)
+# Hyperparameter tuning with time-series cross-validation
+param_grid = {
+    'n_neighbors': [5, 7, 9, 11, 13, 15],
+    'weights': ['uniform', 'distance'],
+    'p': [1, 2],
+    'leaf_size': [20, 30, 40]
+}
 
-# Predict and evaluate
-y_pred = knn.predict(X_test_scaled)
-accuracy = accuracy_score(y_test, y_pred)
-print(f'Model Accuracy: {accuracy:.2f}')
+knn = KNeighborsClassifier()
+tscv = TimeSeriesSplit(n_splits=5)
+grid_search = GridSearchCV(knn, param_grid, cv=tscv, scoring='accuracy', n_jobs=-1)
+grid_search.fit(X_train_scaled, y_train)
 
-# Example prediction
-example_ticker = 'AAPL'
-if example_ticker in features.index:
-    example_features = features.loc[example_ticker].values.reshape(1, -1)
-    example_features_scaled = scaler.transform(example_features)
-    predicted_label = knn.predict(example_features_scaled)[0]
-    print(f'{example_ticker} is predicted to have {labels.cat.categories[predicted_label]} volatility.')
-else:
-    print(f'{example_ticker} not found in the dataset.')
+# Best model evaluation
+best_knn = grid_search.best_estimator_
+print(f"Best Parameters: {grid_search.best_params_}")
+print(f"Best Validation Accuracy: {grid_search.best_score_:.3f}")
+
+# Test set evaluation
+y_pred = best_knn.predict(X_test_scaled)
+test_acc = accuracy_score(y_test, y_pred)
+print(f"\nTest Accuracy: {test_acc:.3f}")
+print(classification_report(y_test, y_pred, target_names=['low', 'medium', 'high']))
+
+# Confusion matrix visualization
+cm = confusion_matrix(y_test, y_pred)
+disp = ConfusionMatrixDisplay(confusion_matrix=cm, 
+                              display_labels=['low', 'medium', 'high'])
+disp.plot(cmap='Blues')
+plt.title('Volatility Classification Confusion Matrix')
+plt.show()
+
+# Feature importance analysis
+result = permutation_importance(best_knn, X_test_scaled, y_test, 
+                                n_repeats=10, random_state=42)
+sorted_idx = result.importances_mean.argsort()[::-1]
+
+plt.figure(figsize=(10, 6))
+plt.title("Feature Importance via Permutation")
+plt.barh(range(X.shape[1]), result.importances_mean[sorted_idx])
+plt.yticks(range(X.shape[1]), [features[i] for i in sorted_idx])
+plt.xlabel("Importance Score")
+plt.tight_layout()
+plt.show()
