@@ -13,7 +13,7 @@ tickers = [
 ]
 
 # Download historical OHLCV data for all tickers
-data = yf.download(tickers, period='3m', group_by='ticker')
+data = yf.download(tickers, period='2y', group_by='ticker')
 
 # Prepare features and calculate volatility
 features = pd.DataFrame(index=tickers)

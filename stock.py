@@ -17,7 +17,7 @@ sns.set()
 # Fetch Microsoft stock data (5 years)
 print("Fetching Microsoft stock data...")
 msft = yf.Ticker('AAPL')
-df = msft.history(period="10y", auto_adjust=True)
+df = msft.history(period="2y", auto_adjust=True)
 
 # Ensure data is sufficient
 if df.empty:
