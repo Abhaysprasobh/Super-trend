@@ -17,7 +17,7 @@ sns.set()
 # Fetch Microsoft stock data (5 years)
 print("Fetching Microsoft stock data...")
 msft = yf.Ticker('AAPL')
-df = msft.history(period="2y", auto_adjust=True)
+df = msft.history(period="6mo", auto_adjust=True)
 
 # Ensure data is sufficient
 if df.empty:
@@ -67,7 +67,7 @@ for col in ['ATR', 'Volatility_10', 'Volatility_20', 'MACD', 'RSI']:
     df[col] = mstats.winsorize(df[col], limits=[0.01, 0.01])  # Removes extreme values
 
 # 🔹 Define Features and Target
-features = ['ATR', 'ATR_Trend', 'Volatility_10', 'Volatility_20', 'Annualized_Volatility', 'MACD', 'RSI', 'VWAP', 'Bollinger_Upper', 'Bollinger_Lower']
+features = ['ATR', 'ATR_Trend', 'Volatility_10', 'Volatility_20', 'Annualized_Volatility', 'MACD', 'RSI',  'Bollinger_Upper', 'Bollinger_Lower']
 X = df[features]
 y = df['Target']
 
