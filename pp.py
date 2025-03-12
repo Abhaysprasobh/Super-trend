@@ -160,3 +160,10 @@ def predict_next_day_volatility(model, last_30_days):
     prediction_label = ['Low', 'Medium', 'High'][torch.argmax(prediction).item()]
     print(f"Predicted Volatility for Next Day: {prediction_label}")
     return prediction_label
+
+# Extract last 30 days of features for prediction
+last_30_days = full_df[features].iloc[-30:].values
+last_30_days = np.nan_to_num(last_30_days)  # Handle NaNs
+
+# Call the function to predict the next day's volatility
+predict_next_day_volatility(model, last_30_days)
