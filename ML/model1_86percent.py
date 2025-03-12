@@ -105,81 +105,17 @@ print(classification_report(y_test, y_pred))
 # Save model
 joblib.dump(clf, 'volatility_classifier.pkl')
 
-# Adaptive Supertrend implementation
-def adaptive_supertrend(df, model, lookback=30):
-    required_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
-    
-    # Compute features for new data
-    df = compute_features(df, 'Current')
-    
-    # Prepare features for prediction
-    latest = df.iloc[[-1]].copy()
-    latest_features = pd.get_dummies(latest[features], columns=['Ticker'])
-    
-    # Ensure all ticker columns are present
-    for col in X.columns:
-        if col not in latest_features.columns:
-            latest_features[col] = 0
-    
-    # Predict volatility category
-    prediction = model.predict(latest_features[X.columns])[0]
-    
-    # Set parameters based on volatility
-    if prediction == 'Low':
-        multiplier = 2.0
-        period = 10
-    elif prediction == 'Medium':
-        multiplier = 3.0
-        period = 14
-    else:
-        multiplier = 4.0
-        period = 20
-    
-    # Calculate ATR
-    high_low = df['High'] - df['Low']
-    high_close = np.abs(df['High'] - df['Close'].shift())
-    low_close = np.abs(df['Low'] - df['Close'].shift())
-    tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
-    atr = tr.rolling(period).mean().iloc[-1]
-    
-    # Calculate Supertrend
-    hl2 = (df['High'].iloc[-1] + df['Low'].iloc[-1])/2
-    upper_band = hl2 + multiplier * atr
-    lower_band = hl2 - multiplier * atr
-    
-    # Generate signal
-    close = df['Close'].iloc[-1]
-    prev_close = df['Close'].iloc[-2] if len(df) > 1 else close
-    
-    if close > upper_band:
-        signal = 1  # Buy
-    elif close < lower_band:
-        signal = -1  # Sell
-    else:
-        signal = 1 if prev_close > df['Close'].iloc[-1] else -1
-    
-    return {
-        'volatility_category': prediction,
-        'supertrend_upper': upper_band,
-        'supertrend_lower': lower_band,
-        'signal': signal,
-        'multiplier': multiplier,
-        'atr_period': period
-    }
+# Output    
+# (env) PS C:\Users\nithi\Documents\gitprojects\Super-trend> & C:/Users/nithi/Documents/gitprojects/Super-trend/env/Scripts/python.exe c:/Users/nithi/Documents/gitprojects/Super-trend/adapt.py
+# YF.download() has changed argument auto_adjust default to True
+# [*********************100%***********************]  6 of 6 completed
+# Model Accuracy: 0.86
+#               precision    recall  f1-score   support
 
-# Example usage
-if __name__ == "__main__":
-    # Load trained model
-    model = joblib.load('volatility_classifier.pkl')
-    
-    # Get recent data for a stock
-    test_data = yf.download('AAPL', period='1y', interval='1d')
-    
-    # Generate adaptive Supertrend signal
-    analysis = adaptive_supertrend(test_data, model)
-    
-    print("\nAdaptive Supertrend Analysis:")
-    print(f"Volatility Category: {analysis['volatility_category']}")
-    print(f"Upper Band: {analysis['supertrend_upper']:.2f}")
-    print(f"Lower Band: {analysis['supertrend_lower']:.2f}")
-    print(f"Trading Signal: {'Buy' if analysis['signal'] == 1 else 'Sell'}")
+#         High       0.78      1.00      0.87       376
+#          Low       0.94      0.90      0.92      1308
+#       Medium       0.70      0.64      0.67       494
+
+#     accuracy                           0.86      2178
+#    macro avg       0.81      0.85      0.82      2178
+# weighted avg       0.86      0.86      0.86      2178
