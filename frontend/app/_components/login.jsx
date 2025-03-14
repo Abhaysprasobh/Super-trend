@@ -12,7 +12,7 @@ function Login() {
     setError(''); 
 
     try {
-      const response = await axios.post('https://jassim.com/login', {
+      const response = await axios.post('http://localhost:5000/login', {
         email,
         password,
       });
@@ -26,16 +26,14 @@ function Login() {
   };
 
   return (
-    <div className="min-h-screen  flex items-center justify-center">
+    <div className="min-h-screen flex items-center justify-center">
       <section className="w-full max-w-md px-6 py-12 bg-white shadow-lg rounded-lg">
         <div className="text-center">
           <h1 className="text-3xl font-bold text-red-600">Login</h1>
         </div>
 
-        <form onSubmit={handleLogin} className="mt-8 space-y-6">
-
-          
-          <div>
+        <form onSubmit={handleLogin} className="mt-8 space-y-6 flex flex-col items-center">
+          <div className="w-full">
             <label htmlFor="email" className="sr-only">Email:</label>
             <input
               type="email"
@@ -48,7 +46,7 @@ function Login() {
             />
           </div>
 
-          <div>
+          <div className="w-full">
             <label htmlFor="password" className="sr-only">Password:</label>
             <input
               type="password"
@@ -61,17 +59,16 @@ function Login() {
             />
           </div>
 
-        <div>
-          <button
+          <div>
+            <button
               type="submit"
               className="bg-green-600 text-white py-2 px-6 rounded-lg hover:bg-green-700 focus:ring focus:ring-green-500"
             >
               Sign in
-          </button>
-        </div>
+            </button>
+          </div>
 
-        {error && <p className="text-red-600 text-sm text-center">{error}</p>}
-
+          {error && <p className="text-red-600 text-sm text-center">{error}</p>}
 
           <div className="flex justify-center items-center">
             <p className="text-sm text-gray-500">

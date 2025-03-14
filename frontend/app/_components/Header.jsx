@@ -6,15 +6,22 @@ import Link from 'next/link';
 
 
 function Header() {
-    const [isLogin,setIsLogin]= useState(true);
-    const authToken = localStorage.getItem('authToken');
-    const handleLogout = ()=>{
+    const [isLogin, setIsLogin] = useState(false);
+
+    // Move localStorage logic into useEffect to avoid hydration errors
+    React.useEffect(() => {
+      const authToken = localStorage.getItem('authToken');
+      if (authToken) {
+        setIsLogin(true);
+      }
+    }, []);
+
+    const handleLogout = React.useCallback(() => {
+      if (typeof window !== 'undefined') {
         localStorage.removeItem('authToken');
         setIsLogin(false);
-    }
-    if(authToken){
-        setIsLogin(true);
-    }
+      }
+    }, []);
   return (
     <div>
         <header className="bg-white">
