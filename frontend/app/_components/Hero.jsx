@@ -1,40 +1,43 @@
-import React from 'react'
+import React from 'react';
 
-function Hero() {
+export default function Hero() {
   return (
-    <div>
-        <section className="overflow-hidden bg-gray-50 sm:grid sm:grid-cols-2 sm:items-center">
-        <div className="p-8 md:p-12 lg:px-16 lg:py-24">
-            <div className="mx-auto max-w-xl text-center ltr:sm:text-left rtl:sm:text-right">
-            <h2 className="text-2xl font-bold text-gray-900 md:text-3xl">
-                Lorem, ipsum dolor sit amet consectetur adipisicing elit
-            </h2>
-
-            <p className="hidden text-gray-500 md:mt-4 md:block">
-                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Et, egestas tempus tellus etiam
-                sed. Quam a scelerisque amet ullamcorper eu enim et fermentum, augue. Aliquet amet volutpat
-                quisque ut interdum tincidunt duis.
-            </p>
-
-            <div className="mt-4 md:mt-8">
-                <a
-                href="#"
-                className="inline-block rounded bg-emerald-600 px-12 py-3 text-sm font-medium text-white transition hover:bg-emerald-700 focus:outline-none focus:ring focus:ring-yellow-400"
-                >
-                Get Started Today
-                </a>
-            </div>
-            </div>
+    <section className="flex flex-col items-center justify-center text-center py-24 px-6 bg-sky-950 text-gray-100 relative overflow-hidden">
+      <div className="absolute inset-0 bg-grid-gray-300/[0.2] pointer-events-none"></div>
+      <div className="max-w-3xl relative z-10">
+        <h1 className="text-4xl font-extrabold md:text-6xl text-white drop-shadow-lg transform transition duration-500 hover:scale-105">
+          Adaptive Super Trend Indicator
+        </h1>
+        <p className="text-gray-300 md:mt-6 md:text-lg font-medium">
+          Gain precise market insights with our cutting-edge adaptive Super Trend indicator.
+          Utilize real-time analytics, trend analysis, and dynamic alerts to make informed trading decisions.
+        </p>
+        <ul className="mt-6 text-gray-200 md:text-lg space-y-2 text-left md:text-center">
+          <li className="flex items-center justify-center">
+            ✅ Real-time trend analysis and adaptive strategies
+          </li>
+          <li className="flex items-center justify-center">
+            ✅ Customizable alerts for major market movements
+          </li>
+          <li className="flex items-center justify-center">
+            ✅ Seamless integration with trading platforms
+          </li>
+        </ul>
+        <div className="mt-8 flex flex-col sm:flex-row sm:justify-center gap-4">
+          <a
+            href="#"
+            className="inline-block rounded bg-green-600 px-12 py-3 text-lg font-medium text-white transition-transform transform hover:scale-105 hover:bg-green-700 focus:outline-none focus:ring focus:ring-green-400 shadow-lg"
+          >
+            Get Started
+          </a>
+          <a
+            href="#"
+            className="inline-block rounded border border-slate-600 px-12 py-3 text-lg font-medium text-green-300 transition-transform transform hover:scale-105 hover: focus:outline-none focus:ring focus:ring-green-400 shadow-lg"
+          >
+            Learn More
+          </a>
         </div>
-
-        <img
-            alt=""
-            src="https://images.unsplash.com/photo-1484959014842-cd1d967a39cf?ixlib=rb-1.2.1&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1770&q=80"
-            className="h-full w-full object-cover sm:h-[calc(100%_-_2rem)] sm:self-end sm:rounded-ss-[30px] md:h-[calc(100%_-_4rem)] md:rounded-ss-[60px]"
-        />
-        </section>
-    </div>
-  )
+      </div>
+    </section>
+  );
 }
-
-export default Hero

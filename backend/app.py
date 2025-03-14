@@ -6,11 +6,14 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 import yfinance as yf
 from dotenv import load_dotenv
+from flask_cors import CORS
 
 load_dotenv()
 
+
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
+CORS(app, supports_credentials=True, origins=["http://localhost:3000"]) 
 
 # MySQL configurations
 app.config['MYSQL_HOST'] = os.getenv('MYSQL_HOST')
@@ -64,8 +67,10 @@ def register():
     username = data.get('username')
     email = data.get('email')
     password = generate_password_hash(data.get('password'))
+    print(data)
 
     if not all([username, email, password]):
+        print("missing")
         return jsonify({'message': 'Missing required fields'}), 400
 
     cur = mysql.connection.cursor()
@@ -75,8 +80,10 @@ def register():
             (username, email, password)
         )
         mysql.connection.commit()
+        print("successfull")
         return jsonify({'message': 'User created successfully'}), 201
     except Exception as e:
+        print(e)
         return jsonify({'message': str(e)}), 400
     finally:
         cur.close()
@@ -84,6 +91,7 @@ def register():
 @app.route('/api/login', methods=['POST'])
 def login():
     data = request.get_json()
+    print(data)
     username = data.get('username')
     password = data.get('password')
 
@@ -93,6 +101,7 @@ def login():
     cur.close()
 
     if not user or not check_password_hash(user[3], password):
+        print("not found user")
         return jsonify({'message': 'Invalid credentials'}), 401
 
     return jsonify({'token': user[0]}), 200

@@ -28,9 +28,9 @@ function Header() {
         <div className="mx-auto max-w-screen-xl px-4 sm:px-6 lg:px-8">
             <div className="flex h-16 items-center justify-between">
             <div className="md:flex md:items-center md:gap-12">
-                <a className="block text-teal-600" href="./">
+                <a className="block font-bold text-2xl text-cyan-600" href="./">A
                 <span className="sr-only">Home</span>
-                <Image src="./logo.svg" alt='logo' width={60} height={20}/>
+                {/* <Image src="./logo.svg" alt='logo' width={60} height={20}/> */}
                 </a>
             </div>
 
@@ -60,7 +60,7 @@ function Header() {
                 { !isLogin &&(
                 <div className="sm:flex sm:gap-4">
                 <a
-                    className="rounded-md bg-teal-600 px-5 py-2.5 text-sm font-medium text-white shadow"
+                    className="rounded-md bg-cyan-600 px-5 py-2.5 text-sm font-medium text-white shadow"
                     href="../Login"
                 >
                     Login/Register
