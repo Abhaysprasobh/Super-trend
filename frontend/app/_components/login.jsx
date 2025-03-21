@@ -37,10 +37,11 @@ function Login() {
       });
 
       const token = response.data.token;
+      console.log(token);
       localStorage.setItem('authToken', token);
 
       alert('Login successful!');
-      Router.push('/dashboard'); // Modify the route as per your application
+      Router.push('./'); // Modify the route as per your application
     } catch (err) {
       setError('Invalid email or password. Please try again.');
     } finally {

@@ -25,7 +25,7 @@ export default function Hero() {
         </ul>
         <div className="mt-8 flex flex-col sm:flex-row sm:justify-center gap-4">
           <a
-            href="#"
+            href="Login"
             className="inline-block rounded bg-green-600 px-12 py-3 text-lg font-medium text-white transition-transform transform hover:scale-105 hover:bg-green-700 focus:outline-none focus:ring focus:ring-green-400 shadow-lg"
           >
             Get Started
