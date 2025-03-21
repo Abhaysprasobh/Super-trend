@@ -1,16 +1,12 @@
-
-import os 
-os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
-
-import tensorflow as tf
-
 import numpy as np
-import yfinance as yf
 import pandas as pd
-import matplotlib.pyplot as plt
+import yfinance as yf
+import torch
+import torch.nn as nn
+import torch.optim as optim
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
-from tensorflow.keras.models import load_model
+from torch.utils.data import Dataset, DataLoader
 
 # Download historical stock data
 tickers = ['AAPL', 'MSFT', 'AMZN', 'GOOG', 'TSLA', 'SPY']
@@ -24,13 +20,13 @@ def compute_features(df, ticker):
     df['Ticker'] = ticker
     df['Returns'] = df['Close'].pct_change()
     df['Volatility_30'] = df['Returns'].rolling(30).std()
-    
+
     high_low = df['High'] - df['Low']
     high_close = np.abs(df['High'] - df['Close'].shift())
     low_close = np.abs(df['Low'] - df['Close'].shift())
     tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
     df['ATR_14'] = tr.rolling(14).mean()
-    
+
     delta = df['Close'].diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
@@ -38,23 +34,23 @@ def compute_features(df, ticker):
     avg_loss = loss.rolling(14).mean()
     rs = avg_gain / avg_loss
     df['RSI_14'] = 100 - (100 / (1 + rs))
-    
+
     ema12 = df['Close'].ewm(span=12, adjust=False).mean()
     ema26 = df['Close'].ewm(span=26, adjust=False).mean()
     df['MACD'] = ema12 - ema26
     df['MACD_Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
-    
+
     sma20 = df['Close'].rolling(20).mean()
     std20 = df['Close'].rolling(20).std()
     df['Bollinger_%b'] = (df['Close'] - (sma20 - 2*std20)) / ((sma20 + 2*std20) - (sma20 - 2*std20))
-    
+
     df['ATR_14_Pct'] = df['ATR_14'] / df['Close']
     df['MA_50_200_Ratio'] = df['Close'].rolling(50).mean() / df['Close'].rolling(200).mean()
     df['Volume_Ratio'] = df['Volume'] / df['Volume'].rolling(20).mean()
-    
+
     df['Momentum_1M'] = df['Close'].pct_change(21)
     df['Momentum_3M'] = df['Close'].pct_change(63)
-    
+
     return df.dropna()
 
 # Process data for all tickers
@@ -91,30 +87,83 @@ for i in range(sequence_length, len(full_df)):
     y.append(full_df['Volatility_Category'].iloc[i])
 X, y = np.array(X), np.array(y)
 
+# Handle NaN values
+X = np.nan_to_num(X)
+
 # Train-test split
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
 
-# Load the trained Keras model
-model = load_model("stock.h5")  # Load the model saved in .h5 format
+# PyTorch Dataset & DataLoader
+class StockDataset(Dataset):
+    def __init__(self, X, y):
+        self.X = torch.tensor(X, dtype=torch.float32)
+        self.y = torch.tensor(pd.factorize(y)[0], dtype=torch.long)
 
-# Make predictions
-y_pred_probs = model.predict(X_test)  # Keras model expects input in batch form
-y_pred = np.argmax(y_pred_probs, axis=1)  # Get the class with highest probability
+    def __len__(self):
+        return len(self.X)
 
-# Calculate accuracy
+    def __getitem__(self, idx):
+        return self.X[idx], self.y[idx]
+
+train_dataset = StockDataset(X_train, y_train)
+test_dataset = StockDataset(X_test, y_test)
+
+train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+
+# Define LSTM Model
+class LSTMModel(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super(LSTMModel, self).__init__()
+        self.lstm = nn.LSTM(input_dim, hidden_dim, batch_first=True)
+        self.dropout = nn.Dropout(0.2)
+        self.fc = nn.Linear(hidden_dim, output_dim)
+
+    def forward(self, x):
+        out, _ = self.lstm(x)
+        out = self.dropout(out[:, -1, :])
+        out = self.fc(out)
+        return out
+
+# Initialize model
+model = LSTMModel(input_dim=X_train.shape[2], hidden_dim=50, output_dim=3)
+criterion = nn.CrossEntropyLoss()
+optimizer = optim.Adam(model.parameters(), lr=0.0005)
+
+# Train the model
+epochs = 50
+for epoch in range(epochs):
+    model.train()
+    total_loss = 0
+    for X_batch, y_batch in train_loader:
+        optimizer.zero_grad()
+        output = model(X_batch)
+        loss = criterion(output, y_batch)
+        loss.backward()
+        optimizer.step()
+        total_loss += loss.item()
+    print(f"Epoch {epoch+1}/{epochs}, Loss: {total_loss/len(train_loader):.4f}")
+
+# Evaluate model
+model.eval()
+y_pred_probs = torch.softmax(model(torch.tensor(X_test, dtype=torch.float32)), dim=1)
+y_pred = torch.argmax(y_pred_probs, dim=1).numpy()
 accuracy = np.mean(y_pred == pd.factorize(y_test)[0])
 print(f"Model Accuracy: {accuracy * 100:.2f}%")
 
-# Plot Predictions vs Actual
-category_mapping = {0: 'Low', 1: 'Medium', 2: 'High'}
-y_test_labels = [category_mapping[label] for label in pd.factorize(y_test)[0]]
-y_pred_labels = [category_mapping[label] for label in y_pred]
+# Predict next day's stock volatility
+def predict_next_day_volatility(model, last_30_days):
+    model.eval()
+    X_new = torch.tensor(last_30_days, dtype=torch.float32).unsqueeze(0)
+    with torch.no_grad():
+        prediction = torch.softmax(model(X_new), dim=1)
+    prediction_label = ['Low', 'Medium', 'High'][torch.argmax(prediction).item()]
+    print(f"Predicted Volatility for Next Day: {prediction_label}")
+    return prediction_label
 
-plt.figure(figsize=(10, 5))
-plt.plot(y_test_labels, label="Actual", marker='o', alpha=0.7)
-plt.plot(y_pred_labels, label="Predicted", marker='x', linestyle='dashed', alpha=0.7)
-plt.legend()
-plt.title("LSTM Model Predictions vs Actual Volatility")
-plt.xlabel("Sample Index")
-plt.ylabel("Volatility Category")
-plt.show()
+# Extract last 30 days of features for prediction
+last_30_days = full_df[features].iloc[-30:].values
+last_30_days = np.nan_to_num(last_30_days)  # Handle NaNs
+
+# Call the function to predict the next day's volatility
+predict_next_day_volatility(model, last_30_days)

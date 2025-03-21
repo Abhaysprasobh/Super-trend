@@ -1,7 +1,7 @@
 env
 .env
 secret.py
-
+tf_env 
 # Python
 __pycache__/
 *.py[cod]
