@@ -51,6 +51,17 @@ def test_get_stock_data(token, ticker="AAPL"):
     })
     print_response(response)
 
+def test_get_indicator_comparison(token, symbol="AAPL", interval="1d", days=700):
+    print(f"Testing Get Indicator Comparison for {symbol}...")
+    response = requests.post(f"{BASE_URL}/indicator", headers={
+        "x-access-token": str(token)
+    }, json={
+        "symbol": symbol,
+        "interval": interval,
+        "days": days
+    })
+    print_response(response)
+
 if __name__ == "__main__":
     print("Starting API Integration Tests")
     print("=" * 50)
@@ -60,5 +71,6 @@ if __name__ == "__main__":
         test_get_user(token)
         test_get_stock_data(token, "AAPL")
         test_get_stock_data(token, "GOOGL")
+        test_get_indicator_comparison(token, symbol="AAPL", interval="1d", days=700)
     else:
         print("Login failed, skipping further tests.")

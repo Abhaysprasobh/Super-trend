@@ -10,6 +10,7 @@ from flask_cors import CORS
 
 load_dotenv()
 
+from analysis  import api_get_indicator_comparison
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
@@ -134,6 +135,40 @@ def get_stock_data(current_user):
         }), 200
     except Exception as e:
         return jsonify({'message': str(e)}), 500
+    
+
+
+
+
+
+
+
+@app.route('/api/indicator', methods=['POST'])
+@token_required
+def get_indicator_comparison(current_user):
+    """
+    New API endpoint that returns indicator data, backtest performance,
+    signals, equity curves, and annual returns for a given symbol.
+    """
+    data = request.get_json()
+    symbol = data.get('symbol')
+    interval = data.get('interval', '1d')
+    days = data.get('days', 700)
+    
+    if not symbol:
+        return jsonify({'message': 'Symbol is required'}), 400
+    
+    try:
+        result = api_get_indicator_comparison(symbol, interval, days)
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({'message': str(e)}), 500
+
+
+
+
+
+
 
 @app.route('/api/user', methods=['GET'])
 @token_required
