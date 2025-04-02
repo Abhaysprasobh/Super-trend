@@ -42,7 +42,7 @@ function Header() {
                     </li>
 
                     <li>
-                    <a className="text-gray-500 transition hover:text-gray-500/75" href="#"> Predictions & Insights </a>
+                    <a className="text-gray-500 transition hover:text-gray-500/75" href="../Prediction"> Predictions & Insights </a>
                     </li>
 
                     <li>
@@ -50,7 +50,7 @@ function Header() {
                     </li>
 
                     <li>
-                    <a className="text-gray-500 transition hover:text-gray-500/75" href="#"> Trading Signals </a>
+                    <a className="text-gray-500 transition hover:text-gray-500/75" href="../Signals"> Trading Signals </a>
                     </li>
                 </ul>
                 </nav>

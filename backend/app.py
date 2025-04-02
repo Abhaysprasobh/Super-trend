@@ -137,12 +137,6 @@ def get_stock_data(current_user):
         return jsonify({'message': str(e)}), 500
     
 
-
-
-
-
-
-
 @app.route('/api/indicator', methods=['POST'])
 @token_required
 def get_indicator_comparison(current_user):
@@ -163,12 +157,6 @@ def get_indicator_comparison(current_user):
         return jsonify(result), 200
     except Exception as e:
         return jsonify({'message': str(e)}), 500
-
-
-
-
-
-
 
 @app.route('/api/user', methods=['GET'])
 @token_required
