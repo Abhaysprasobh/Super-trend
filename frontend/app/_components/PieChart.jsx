@@ -22,44 +22,57 @@ export function CustomPieChart() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [userInput, setUserInput] = useState("");
+  const [stockInfo, setStockInfo] = useState({
+    currentPrice: 0,
+    dayHigh: 0,
+    dayLow: 0,
+  });
 
-  const loadStockData = async (selectedTicker) => {
-    try {
-      setLoading(true);
-      setError(null);
 
-      const stockData = await fetchStockData(selectedTicker);
-      console.log("Stock Data Response:", stockData);
+const loadStockData = async (selectedTicker) => {
+  try {
+    setLoading(true);
+    setError(null);
 
-      if (!stockData || typeof stockData !== "object") {
-        throw new Error("Invalid response from server.");
-      }
-      if (!stockData.history || !Array.isArray(stockData.history)) {
-        throw new Error("Stock history data is missing or incorrect.");
-      }
+    const stockData = await fetchStockData(selectedTicker);
+    console.log("Stock Data Response:", stockData);
 
-      const history = stockData.history
-        .map((item) => ({
-          date: new Date(item.Date).toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-          }),
-          close: item.Close ?? 0,
-        }))
-        .filter((item) => !isNaN(item.close) && item.close > 0);
-
-      const totalClose = history.reduce((sum, item) => sum + item.close, 0);
-      const avgClose = history.length > 0 ? totalClose / history.length : 0;
-
-      setChartData(history);
-      setAvgClosePrice(avgClose);
-    } catch (err) {
-      setError(err.message || "Failed to fetch stock data.");
-      console.error("Stock data fetch error:", err);
-    } finally {
-      setLoading(false);
+    if (!stockData || typeof stockData !== "object") {
+      throw new Error("Invalid response from server.");
     }
-  };
+
+    if (!stockData.history || !Array.isArray(stockData.history)) {
+      throw new Error("Stock history data is missing or incorrect.");
+    }
+
+    setStockInfo({
+      currentPrice: stockData.info?.currentPrice ?? 0,
+      dayHigh: stockData.info?.dayHigh ?? 0,
+      dayLow: stockData.info?.dayLow ?? 0,
+    });
+
+    const history = stockData.history
+      .map((item) => ({
+        date: new Date(item.Date).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        }),
+        close: item.Close ?? 0,
+      }))
+      .filter((item) => !isNaN(item.close) && item.close > 0);
+
+    const totalClose = history.reduce((sum, item) => sum + item.close, 0);
+    const avgClose = history.length > 0 ? totalClose / history.length : 0;
+
+    setChartData(history);
+    setAvgClosePrice(avgClose);
+  } catch (err) {
+    setError(err.message || "Failed to fetch stock data.");
+    console.error("Stock data fetch error:", err);
+  } finally {
+    setLoading(false);
+  }
+};
 
   // useEffect(() => {
   //   loadStockData(ticker);
@@ -77,14 +90,14 @@ export function CustomPieChart() {
         <CardTitle>Stock Chart</CardTitle>
         <CardDescription>Enter a stock ticker to view trends</CardDescription>
       </CardHeader>
-      
+
       {/* User Input */}
       <CardContent className="flex flex-row gap-2 pb-4">
-        <Input 
-          type="text" 
-          placeholder="Enter ticker (e.g., AAPL)" 
-          value={userInput} 
-          onChange={(e) => setUserInput(e.target.value)} 
+        <Input
+          type="text"
+          placeholder="Enter ticker (e.g., AAPL)"
+          value={userInput}
+          onChange={(e) => setUserInput(e.target.value)}
         />
         <Button onClick={handleSearch}>Search</Button>
       </CardContent>
@@ -121,7 +134,11 @@ export function CustomPieChart() {
                               <tspan className="fill-foreground text-3xl font-bold">
                                 {avgClosePrice.toFixed(2)}
                               </tspan>
-                              <tspan x={viewBox.cx} y={viewBox.cy + 24} className="fill-muted-foreground text-sm">
+                              <tspan
+                                x={viewBox.cx}
+                                y={viewBox.cy + 24}
+                                className="fill-muted-foreground text-sm"
+                              >
                                 Avg Close Price
                               </tspan>
                             </text>
@@ -134,15 +151,24 @@ export function CustomPieChart() {
                 </PieChart>
               </ResponsiveContainer>
             </div>
+            <CardContent className="text-center">
+              <div className="text-xl font-semibold">
+                {ticker} - ${stockInfo.currentPrice.toFixed(2)}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                High: ${stockInfo.dayHigh.toFixed(2)} | Low: $
+                {stockInfo.dayLow.toFixed(2)}
+              </div>
+            </CardContent>
           </CardContent>
 
           <CardFooter className="flex-col gap-2 text-sm">
-            <div className="flex items-center gap-2 font-medium leading-none">
+            {/* <div className="flex items-center gap-2 font-medium leading-none">
               Trending up by 5.2% this month <TrendingUp className="h-4 w-4" />
-            </div>
-            <div className="leading-none text-muted-foreground">
+            </div> */}
+            {/* <div className="leading-none text-muted-foreground">
               Showing closing prices for {ticker}
-            </div>
+            </div> */}
           </CardFooter>
         </>
       )}

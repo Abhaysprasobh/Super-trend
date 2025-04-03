@@ -57,19 +57,23 @@ export async function fetchStockData(ticker) {
   return await response.json();
 }
 
-// Fetch indicator comparison data via GET
-export async function fetchIndicatorComparison(symbol, interval = "1d", days = 700) {
-  const response = await fetch( 
-    `/api/indicator?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&days=${encodeURIComponent(days)}`,
-    { method: 'GET' }
-  );
+export async function fetchIndicatorComparison(symbol, interval, days) {
+  const response = await fetch(`${API_BASE_URL}/api/indicator`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ symbol, interval, days }),
+  });
+
   if (!response.ok) {
     const errorResponse = await response.json();
-    throw new Error(errorResponse.message || 'Error fetching indicator data');
+    throw new Error(errorResponse.message || "Error fetching indicator data");
   }
+
   return await response.json();
 }
-  
+
   // Fetch user details
   export const getUserData = async () => {
     try {

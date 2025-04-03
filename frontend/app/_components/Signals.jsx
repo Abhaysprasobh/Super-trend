@@ -6,11 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 
 const durationOptions = {
-  "1 Month": 30,
-  "3 Months": 90,
   "6 Months": 180,
   "1 Year": 365,
-  "2 Years": 730,
+  "2 Years": 700,
 };
 
 const IndicatorComparison = () => {
