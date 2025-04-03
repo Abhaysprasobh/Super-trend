@@ -98,7 +98,7 @@ const IndicatorComparison = () => {
                         <li key={index} className="flex justify-between items-center text-sm text-gray-700 border-b pb-2">
                           <span>{date}</span>
                           <span className={`font-semibold ${signalData.signals[index] === 1 ? "text-green-500" : "text-red-500"}`}>
-                            {signalData.signals[index] === 1 ? "BUY" : "SELL"} at ${signalData.prices[index]?.toFixed(2) || "N/A"}
+                            {signalData.signals[index] === 1 ? "BUY" : "SELL"} at ₹{signalData.prices[index]?.toFixed(2) || "N/A"}
                           </span>
                         </li>
                       ))}

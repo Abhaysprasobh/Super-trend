@@ -352,10 +352,10 @@ def api_get_indicator_comparison(symbol, interval='1d', days=700):
     # Combine results
     result = {
         'symbol': symbol,
-        'indicator_data': indicator_data,
+        # 'indicator_data': indicator_data,
         'performance': backtest_results['metrics'],
         'signals': backtest_results['signals'],
-        'equity_curves': backtest_results['equity_curves'],
+        # 'equity_curves': backtest_results['equity_curves'],
         'annual_returns': backtest_results['annual_returns'],
         'best_strategy': backtest_results['best_strategy']
     }
