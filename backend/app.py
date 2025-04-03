@@ -107,12 +107,62 @@ def login():
 
     return jsonify({'token': user[0]}), 200
 
-@app.route('/api/stock', methods=['POST'])
-@token_required
-def get_stock_data(current_user):
-    data = request.get_json()
-    ticker = data.get('ticker')
+# @app.route('/api/stock', methods=['GET'])
+# # @token_required
+# def get_stock_data():
+#     data = request.get_json()
+#     ticker = data.get('ticker')
 
+#     if not ticker:
+#         return jsonify({'message': 'Ticker is required'}), 400
+
+#     try:
+#         stock = yf.Ticker(ticker)
+#         info = stock.info
+#         history = stock.history(period="1mo").reset_index()
+        
+#         # Convert DataFrame to JSON serializable format
+#         history = history[['Date', 'Close']].to_dict(orient='records')
+        
+    #     return jsonify({
+    #         'ticker': ticker,
+    #         'info': {
+    #             'currentPrice': info.get('currentPrice'),
+    #             'dayHigh': info.get('dayHigh'),
+    #             'dayLow': info.get('dayLow')
+    #         },
+    #         'history': history
+    #     }), 200
+    # except Exception as e:
+    #     return jsonify({'message': str(e)}), 500
+    
+
+# @app.route('/api/indicator', methods=['GET'])
+# # @token_required
+# def get_indicator_comparison():
+#     """
+#     New API endpoint that returns indicator data, backtest performance,
+#     signals, equity curves, and annual returns for a given symbol.
+#     """
+#     data = request.get_json()
+#     symbol = data.get('symbol')
+#     interval = data.get('interval', '1d')
+#     days = data.get('days', 700)
+    
+#     if not symbol:
+#         return jsonify({'message': 'Symbol is required'}), 400
+    
+
+#     result = api_get_indicator_comparison(symbol, interval, days)
+#     return jsonify(result), 200
+
+
+@app.route('/api/stock', methods=['GET'])
+# @token_required
+def get_stock_data():
+    # Get ticker from query string
+    ticker = request.args.get('ticker')
+    
     if not ticker:
         return jsonify({'message': 'Ticker is required'}), 400
 
@@ -137,26 +187,25 @@ def get_stock_data(current_user):
         return jsonify({'message': str(e)}), 500
     
 
-@app.route('/api/indicator', methods=['POST'])
-@token_required
-def get_indicator_comparison(current_user):
+@app.route('/api/indicator', methods=['GET'])
+# @token_required
+def get_indicator_comparison():
     """
     New API endpoint that returns indicator data, backtest performance,
     signals, equity curves, and annual returns for a given symbol.
     """
-    data = request.get_json()
-    symbol = data.get('symbol')
-    interval = data.get('interval', '1d')
-    days = data.get('days', 700)
+    # Get parameters from query string
+    symbol = request.args.get('symbol')
+    interval = request.args.get('interval', '1d')
+    days = request.args.get('days', 700)
     
     if not symbol:
         return jsonify({'message': 'Symbol is required'}), 400
     
-    try:
-        result = api_get_indicator_comparison(symbol, interval, days)
-        return jsonify(result), 200
-    except Exception as e:
-        return jsonify({'message': str(e)}), 500
+    result = api_get_indicator_comparison(symbol, interval, days)
+    return jsonify(result), 200
+
+
 
 @app.route('/api/user', methods=['GET'])
 @token_required

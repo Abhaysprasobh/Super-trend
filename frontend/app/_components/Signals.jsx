@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useState } from "react";
-import { fetchIndicatorComparison } from "../_utils/GlobalApi"; // API request
+import { fetchIndicatorComparison } from "../_utils/GlobalApi";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, TrendingUp } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 const durationOptions = {
   "1 Month": 30,
@@ -25,7 +25,7 @@ const IndicatorComparison = () => {
       setLoading(true);
       setError(null);
       setData(null);
-      const days = durationOptions[duration]; // Convert duration to days
+      const days = durationOptions[duration];
       const result = await fetchIndicatorComparison(symbol, "1d", days);
       setData(result);
     } catch (err) {
@@ -44,9 +44,7 @@ const IndicatorComparison = () => {
       </CardHeader>
 
       <CardContent>
-        {/* Input Controls */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Stock Symbol Input */}
           <input
             type="text"
             value={symbol}
@@ -55,20 +53,16 @@ const IndicatorComparison = () => {
             className="w-full p-3 border rounded-lg text-gray-700 focus:ring focus:ring-blue-300 outline-none"
           />
 
-          {/* Duration Dropdown */}
           <select
             value={duration}
             onChange={(e) => setDuration(e.target.value)}
             className="w-full p-3 border rounded-lg text-gray-700 focus:ring focus:ring-blue-300 outline-none"
           >
             {Object.keys(durationOptions).map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
+              <option key={option} value={option}>{option}</option>
             ))}
           </select>
 
-          {/* Fetch Button */}
           <button
             onClick={handleFetchData}
             className="w-full p-3 bg-gradient-to-r from-blue-500 to-cyan-600 text-white font-semibold rounded-lg hover:scale-105 transition-transform duration-200 flex items-center justify-center"
@@ -77,44 +71,45 @@ const IndicatorComparison = () => {
           </button>
         </div>
 
-        {/* Status Messages */}
         {error && <p className="text-red-500 mt-4 text-sm">{error}</p>}
         {loading && <p className="text-gray-500 mt-4 text-sm">Fetching data...</p>}
 
-        {/* Data Display */}
         {data && (
           <div className="mt-6 space-y-6">
-            {/* Backtest Performance */}
             <div className="p-4 border rounded-lg bg-gray-50 shadow-sm">
-              <h3 className="text-lg font-medium text-gray-800">📊 Backtest Performance</h3>
-              <p className="text-sm text-gray-600 mt-1">
-                <strong>Win Rate:</strong> {data.backtest?.winRate}%
-              </p>
-              <p className="text-sm text-gray-600">
-                <strong>Annual Return:</strong> {data.backtest?.annualReturn}%
-              </p>
+              <h3 className="text-lg font-medium text-gray-800">📊 Performance Summary</h3>
+              {Object.entries(data.performance || {}).map(([strategy, stats]) => (
+                <div key={strategy} className="text-sm text-gray-600 mt-2">
+                  <strong>{strategy}</strong>
+                  <p>Total Return: {stats?.total_return || "N/A"}</p>
+                  <p>Annualized Return: {stats?.annualized_return || "N/A"}</p>
+                  <p>Sharpe Ratio: {stats?.sharpe_ratio || "N/A"}</p>
+                  <p>Win Rate: {stats?.win_rate || "N/A"}</p>
+                </div>
+              ))}
             </div>
 
-            {/* Trading Signals */}
             <div className="p-4 border rounded-lg bg-gray-50 shadow-sm">
               <h3 className="text-lg font-medium text-gray-800">📢 Trading Signals</h3>
-              {data.signals?.length ? (
-                <ul className="mt-2 space-y-2">
-                  {data.signals.map((signal, index) => (
-                    <li
-                      key={index}
-                      className="flex justify-between items-center text-sm text-gray-700 border-b pb-2"
-                    >
-                      <span>{signal.date}</span>
-                      <span className={`font-semibold ${signal.type === "BUY" ? "text-green-500" : "text-red-500"}`}>
-                        {signal.type} at ${signal.price.toFixed(2)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-gray-600 text-sm mt-1">No signals available</p>
-              )}
+              {Object.entries(data.signals || {}).map(([strategy, signalData]) => (
+                <div key={strategy} className="mt-2">
+                  <strong>{strategy}</strong>
+                  {signalData.dates?.length ? (
+                    <ul className="mt-2 space-y-2">
+                      {signalData.dates.map((date, index) => (
+                        <li key={index} className="flex justify-between items-center text-sm text-gray-700 border-b pb-2">
+                          <span>{date}</span>
+                          <span className={`font-semibold ${signalData.signals[index] === 1 ? "text-green-500" : "text-red-500"}`}>
+                            {signalData.signals[index] === 1 ? "BUY" : "SELL"} at ${signalData.prices[index]?.toFixed(2) || "N/A"}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-gray-600 text-sm mt-1">No signals available</p>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         )}

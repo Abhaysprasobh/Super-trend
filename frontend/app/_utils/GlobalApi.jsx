@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_BASE_URL = "http://localhost:3000";
+const API_BASE_URL = "http://localhost:5000";
 
 export const loginUser = async (email, password) => {
   try {
@@ -35,35 +35,40 @@ export const registerUser = async (userData) => {
     withCredentials: true, // Ensures cookies are sent for authentication
   });
   
-  // const handleApiError = (error) => {
-  //   if (error.response) {
-  //     return error.response.data?.message || "An error occurred. Please try again.";
-  //   } else if (error.request) {
-  //     return "No response from the server. Check your network connection.";
-  //   } else {
-  //     return "Request setup error. Please try again.";
-  //   }
-  // };
-  
-  // Fetch stock data
-  export const fetchStockData = async (ticker) => {
-    try {
-      const response = await apiClient.post("/stock", { ticker });
-      return response.data;
-    } catch (error) {
-      throw handleApiError(error);
+  const handleApiError = (error) => {
+    if (error.response) {
+      return error.response.data?.message || "An error occurred. Please try again.";
+    } else if (error.request) {
+      return "No response from the server. Check your network connection.";
+    } else {
+      return "Request setup error. Please try again.";
     }
   };
   
-  // Fetch indicator comparison
-  export const getIndicatorComparison = async (symbol, interval = "1d", days = 700) => {
-    try {
-      const response = await apiClient.post("/indicator", { symbol, interval, days });
-      return response.data;
-    } catch (error) {
-      throw handleApiError(error);
-    }
-  };
+// Fetch stock data via GET
+export async function fetchStockData(ticker) {
+  const response = await fetch(`${API_BASE_URL}/api/stock?ticker=${encodeURIComponent(ticker)}`, {
+    method: 'GET'
+  });
+  if (!response.ok) {
+    const errorResponse = await response.json();
+    throw new Error(errorResponse.message || 'Error fetching stock data');
+  }
+  return await response.json();
+}
+
+// Fetch indicator comparison data via GET
+export async function fetchIndicatorComparison(symbol, interval = "1d", days = 700) {
+  const response = await fetch( 
+    `/api/indicator?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&days=${encodeURIComponent(days)}`,
+    { method: 'GET' }
+  );
+  if (!response.ok) {
+    const errorResponse = await response.json();
+    throw new Error(errorResponse.message || 'Error fetching indicator data');
+  }
+  return await response.json();
+}
   
   // Fetch user details
   export const getUserData = async () => {

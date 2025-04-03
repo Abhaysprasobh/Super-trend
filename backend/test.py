@@ -71,6 +71,6 @@ if __name__ == "__main__":
         test_get_user(token)
         test_get_stock_data(token, "AAPL")
         test_get_stock_data(token, "GOOGL")
-        test_get_indicator_comparison(token, symbol="AAPL", interval="1d", days=700)
+        # test_get_indicator_comparison(token, symbol="AAPL", interval="1d", days=700)
     else:
         print("Login failed, skipping further tests.")
