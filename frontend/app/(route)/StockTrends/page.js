@@ -1,4 +1,4 @@
-import { StockTrends } from "@/app/_components/StockTrends";
+import StockTrends from "@/app/_components/StockTrends";
 
 export default function StockPage() {
   return (
