@@ -7,10 +7,15 @@ from functools import wraps
 import yfinance as yf
 from dotenv import load_dotenv
 from flask_cors import CORS
+from apscheduler.schedulers.background import BackgroundScheduler
+# pip install APScheduler
+
+import atexit
 
 load_dotenv()
-
-from analysis  import api_get_indicator_comparison
+from supertrend import get_supertrend_data
+from adaptive import get_adaptive_supertrend_json
+from adapt_test import supertrend_strategy_comparison_json
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
@@ -36,6 +41,35 @@ def create_tables():
                 password VARCHAR(255) NOT NULL
             )
         """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS user_settings (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                ticker VARCHAR(20),
+                atr_len INT DEFAULT 10,
+                factor FLOAT DEFAULT 3.0,
+                training_data_period INT DEFAULT 100,
+                highvol FLOAT DEFAULT 0.75,
+                midvol FLOAT DEFAULT 0.5,
+                lowvol FLOAT DEFAULT 0.25,
+                high_multiplier FLOAT DEFAULT 2.0,
+                mid_multiplier FLOAT DEFAULT 3.0,
+                low_multiplier FLOAT DEFAULT 4.0,
+                days INT DEFAULT 700,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS notifications (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                message TEXT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        """)
+
         cur.close()
 
 create_tables()
@@ -137,26 +171,7 @@ def login():
     #     return jsonify({'message': str(e)}), 500
     
 
-@app.route('/api/indicator', methods=['POST'])
-# @token_required
-def get_indicator_comparison():
-    """
-    New API endpoint that returns indicator data, backtest performance,
-    signals, equity curves, and annual returns for a given symbol.
-    """
-    data = request.get_json()
-    symbol = data.get('symbol')
-    interval = data.get('interval', '1d')
-    days = data.get('days', 700)
-    
-    if not symbol:
-        return jsonify({'message': 'Symbol is required'}), 400
-    
-    try:
-        result = api_get_indicator_comparison(symbol, interval, days)
-        return jsonify(result), 200
-    except Exception as e:
-        return jsonify({'message': str(e)}), 500
+
 
 @app.route('/api/stock', methods=['GET'])
 # @token_required
@@ -188,23 +203,176 @@ def get_stock_data():
         return jsonify({'message': str(e)}), 500
     
 
-# @app.route('/api/indicator', methods=['GET'])
-# # @token_required
-# def get_indicator_comparison():
-#     """
-#     New API endpoint that returns indicator data, backtest performance,
-#     signals, equity curves, and annual returns for a given symbol.
-#     """
-#     # Get parameters from query string
-#     symbol = request.args.get('symbol')
-#     interval = request.args.get('interval', '1d')
-#     days = request.args.get('days', 700)
+# new stuff
+@app.route('/api/indicator', methods=['POST'])
+def get_indicator_comparison():
+    """
+    New API endpoint that returns indicator data, backtest performance,
+    signals, equity curves, and annual returns for a given symbol.
+    """
+    data = request.get_json()
+    symbol = data.get('symbol')
+    high_vol = data.get('high_vol_multiplier', 3)
+    mid_vol = data.get('mid_vol_multiplier', 2)
+    low_vol = data.get('low_vol_multiplier', 1)
+    days = data.get('days', 700)
     
-#     if not symbol:
-#         return jsonify({'message': 'Symbol is required'}), 400
+    if not symbol:
+        return jsonify({'message': 'Symbol is required'}), 400
     
-#     result = api_get_indicator_comparison(symbol, interval, days)
-#     return jsonify(result), 200
+    try:
+        result = supertrend_strategy_comparison_json(
+            ticker=symbol,
+            days=days,
+            high_vol_multiplier=high_vol,
+            mid_vol_multiplier=mid_vol,
+            low_vol_multiplier=low_vol
+        )
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({'message': str(e)}), 500
+    
+@app.route('/api/supertrend', methods=['GET'])
+def supertrend_basic():
+    ticker = request.args.get('ticker')
+    timerange = request.args.get('range', '1mo')
+    length = int(request.args.get('length', 7))
+    multiplier = float(request.args.get('multiplier', 3.0))
+
+    try:
+        response = get_supertrend_data(ticker, timerange, length, multiplier)
+        return jsonify(response), 200
+    except Exception as e:
+        return jsonify({'message': str(e)}), 500
+
+@app.route('/api/adaptive', methods=['POST'])
+@token_required
+def adaptive_supertrend(current_user):
+    data = request.get_json()
+    try:
+        response = get_adaptive_supertrend_json(data)
+        return jsonify(response), 200
+    except Exception as e:
+        return jsonify({'message': str(e)}), 500
+
+
+@app.route('/api/settings', methods=['GET'])
+@token_required
+def get_settings(current_user):
+    user_id = current_user[0]
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT * FROM user_settings WHERE user_id = %s", (user_id,))
+    settings = cur.fetchone()
+    cur.close()
+
+    if not settings:
+        return jsonify({'message': 'No settings found'}), 404
+
+    keys = [desc[0] for desc in cur.description]
+    return jsonify(dict(zip(keys, settings))), 200
+
+
+def create_notification(user_id, message):
+    cur = mysql.connection.cursor()
+    cur.execute("INSERT INTO notifications (user_id, message) VALUES (%s, %s)", (user_id, message))
+    mysql.connection.commit()
+    cur.close()
+
+
+
+@app.route('/api/settings', methods=['POST'])
+@token_required
+def save_settings(current_user):
+    data = request.get_json()
+    user_id = current_user[0]
+
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT id FROM user_settings WHERE user_id = %s", (user_id,))
+    existing = cur.fetchone()
+
+    if existing:
+        cur.execute("""
+            UPDATE user_settings
+            SET ticker=%s, atr_len=%s, factor=%s, training_data_period=%s,
+                highvol=%s, midvol=%s, lowvol=%s,
+                high_multiplier=%s, mid_multiplier=%s, low_multiplier=%s, days=%s
+            WHERE user_id=%s
+        """, (
+            data['ticker'], data['atr_len'], data['factor'], data['training_data_period'],
+            data['highvol'], data['midvol'], data['lowvol'],
+            data['high_multiplier'], data['mid_multiplier'], data['low_multiplier'], data['days'],
+            user_id
+        ))
+    else:
+        cur.execute("""
+            INSERT INTO user_settings (
+                user_id, ticker, atr_len, factor, training_data_period,
+                highvol, midvol, lowvol, high_multiplier, mid_multiplier, low_multiplier, days
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (
+            user_id, data['ticker'], data['atr_len'], data['factor'], data['training_data_period'],
+            data['highvol'], data['midvol'], data['lowvol'],
+            data['high_multiplier'], data['mid_multiplier'], data['low_multiplier'], data['days']
+        ))
+    mysql.connection.commit()
+    cur.close()
+    return jsonify({'message': 'Settings saved'}), 200
+
+
+
+@app.route('/api/notifications', methods=['GET'])
+@token_required
+def get_notifications(current_user):
+    user_id = current_user[0]
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT * FROM notifications WHERE user_id = %s ORDER BY timestamp DESC", (user_id,))
+    rows = cur.fetchall()
+    cur.close()
+
+    notifications = [{
+        'id': r[0],
+        'user_id': r[1],
+        'message': r[2],
+        'timestamp': r[3].strftime("%Y-%m-%d %H:%M:%S")
+    } for r in rows]
+
+    return jsonify(notifications), 200
+
+
+
+
+def check_stock_alerts():
+    with app.app_context():
+        cur = mysql.connection.cursor()
+        cur.execute("SELECT * FROM user_settings")
+        settings = cur.fetchall()
+
+        for s in settings:
+            user_id = s[1]
+            ticker = s[2]
+            days = s[12]
+
+            try:
+                from adapt_test import supertrend_strategy_comparison_json
+                result = supertrend_strategy_comparison_json(
+                    ticker=ticker,
+                    days=days,
+                    high_vol_multiplier=s[9],
+                    mid_vol_multiplier=s[10],
+                    low_vol_multiplier=s[11]
+                )
+
+                last_signal = result.get('adaptive', {}).get('signals', [])[-1]
+                if last_signal['signal'] == 'buy':
+                    create_notification(user_id, f"BUY signal for {ticker}")
+                elif last_signal['signal'] == 'sell':
+                    create_notification(user_id, f"SELL signal for {ticker}")
+            except Exception as e:
+                print(f"Error checking {ticker}: {e}")
+
+        cur.close()
+
+
 
 
 
@@ -217,5 +385,24 @@ def get_user(current_user):
         'email': current_user[2]
     }), 200
 
+
+
+
+
+
+
+
+
+
+
+
+
 if __name__ == '__main__':
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(func=check_stock_alerts, trigger="interval", minutes=30)
+    scheduler.start()
+
+    # Shutdown cleanly
+    atexit.register(lambda: scheduler.shutdown())
+
     app.run(debug=True)

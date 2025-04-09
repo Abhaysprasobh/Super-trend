@@ -1,4 +1,4 @@
-
+import json
 
 import pandas as pd
 import numpy as np
@@ -108,9 +108,9 @@ def plot_standard_supertrend(stock_name, df, length=7, multiplier=3.0, fill_alph
     ax.plot(plot_df.index, plot_df['Close'], label='Close', color='black', alpha=0.7)
 
     if polys_bullish:
-        ax.add_collection(PatchCollection(polys_bullish, facecolor='red', alpha=fill_alpha))
+        ax.add_collection(PatchCollection(polys_bullish, facecolor='green', alpha=fill_alpha))
     if polys_bearish:
-        ax.add_collection(PatchCollection(polys_bearish, facecolor='green', alpha=fill_alpha))
+        ax.add_collection(PatchCollection(polys_bearish, facecolor='red', alpha=fill_alpha))
 
     # Split SuperTrend line by direction
     for i in range(1, len(trend)):
@@ -153,10 +153,70 @@ def plot_standard_supertrend(stock_name, df, length=7, multiplier=3.0, fill_alph
 
 
 
+def get_supertrend_data(ticker: str, timerange: str, length: int = 7, multiplier: float = 3.0):
+    """
+    Get SuperTrend data for a given ticker and return as JSON.
+    
+    Parameters:
+    -----------
+    ticker : str
+        Stock ticker symbol
+    timerange : str
+        Time range for historical data (e.g., '1d', '1wk', '1mo')
+    length : int
+        SuperTrend length parameter
+    multiplier : float
+        SuperTrend multiplier parameter
+    
+    Returns:
+    --------
+    dict
+        JSON-compatible dictionary with SuperTrend data
+    """
+    try:
+        # Get historical data (assuming historical_data function exists)
+        from analysis import historical_data
+        df = historical_data(ticker, timerange, 700)
+        
+        # Calculate SuperTrend
+        result = supertrend(df, length=length, multiplier=multiplier)
+        
+        # Get the relevant columns
+        suffix = f"_{length}_{multiplier}"
+        trend_col = f"SUPERT{suffix}"
+        dir_col = f"SUPERTd{suffix}"
+        
+        # Create response data
+        response_data = {
+            'ticker': ticker,
+            'data': []
+        }
+        
+        # Convert DataFrame to list of dictionaries
+        for index, row in result.iterrows():
+            if pd.notna(row[trend_col]):  # Only include non-NaN values
+                data_point = {
+                    'date': index.strftime('%Y-%m-%d'),
+                    'supertrend': float(row[trend_col]),
+                    'direction': int(row[dir_col]),
+                    'close': float(row['Close'])
+                }
+                response_data['data'].append(data_point)
+        
+        return response_data
+        
+    except Exception as e:
+        return {
+            'error': str(e),
+            'ticker': ticker,
+            'data': []
+        }
+  
+
 # Example usage on historical data:
 if __name__ == '__main__':
     from analysis import historical_data
-    stock_name = 'RELIANCE.NS'
+    stock_name = 'AAPL'
     data = historical_data(stock_name, '1d', 700)
 
     result = supertrend(data, length=7, multiplier=3.0, append=True)
@@ -165,3 +225,6 @@ if __name__ == '__main__':
     plt.show()
 
     print(result)
+    # Test the function
+    result = get_supertrend_data('AAPL', '1d')
+    print(json.dumps(result, indent=2))

@@ -1,3 +1,5 @@
+
+import json
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -61,6 +63,7 @@ def custom_kmeans(data, initial_centroids, max_iter=100, tolerance=1e-6):
 
 def adaptive_supertrend(df, atr_len=10, factor=3.0, training_data_period=100, 
                         highvol=0.75, midvol=0.5, lowvol=0.25,
+                        high_multiplier=2.0, mid_multiplier=3.0, low_multiplier=4.0,
                         high='High', low='Low', close='Close'):
     """
     Machine Learning Adaptive SuperTrend Indicator 
@@ -72,7 +75,7 @@ def adaptive_supertrend(df, atr_len=10, factor=3.0, training_data_period=100,
     atr_len : int
         ATR length for volatility calculation
     factor : float
-        SuperTrend factor
+        SuperTrend factor (fallback if cluster-specific multipliers not used)
     training_data_period : int
         Length of training data for custom k-means clustering
     highvol : float
@@ -81,6 +84,12 @@ def adaptive_supertrend(df, atr_len=10, factor=3.0, training_data_period=100,
         Initial medium volatility percentile guess (0-1)
     lowvol : float
         Initial low volatility percentile guess (0-1)
+    high_multiplier : float
+        Multiplier for high volatility clusters
+    mid_multiplier : float
+        Multiplier for medium volatility clusters
+    low_multiplier : float
+        Multiplier for low volatility clusters
     high, low, close : str
         Column names for High, Low, Close prices
     
@@ -164,12 +173,18 @@ def adaptive_supertrend(df, atr_len=10, factor=3.0, training_data_period=100,
         df.iloc[i, df.columns.get_loc('mid_vol_size')] = mid_vol_size
         df.iloc[i, df.columns.get_loc('low_vol_size')] = low_vol_size
         
-        # Calculate SuperTrend with the assigned centroid (matching Pine Script convention)
-        calculate_supertrend_row(df, i, factor, assigned_centroid, high, low, close)
+        # Determine cluster-specific multiplier
+        if cluster == 0:  # High volatility cluster
+            current_multiplier = high_multiplier
+        elif cluster == 1:  # Medium volatility cluster
+            current_multiplier = mid_multiplier
+        else:  # Low volatility cluster
+            current_multiplier = low_multiplier
+        
+        # Calculate SuperTrend with cluster-specific multiplier
+        calculate_supertrend_row(df, i, current_multiplier, assigned_centroid, high, low, close)
     
     return df
-
-
 def calculate_supertrend_row(df, i, factor, atr_value, high='High', low='Low', close='Close'):
     """
     Calculate SuperTrend for a single row (corrected to match Pine Script convention)
@@ -310,10 +325,10 @@ def plot_adaptive_supertrend(stock_name, df, fill_alpha=0.25):
         ax1.text(idx, close_price * 1.01, label,
                 color=color, fontsize=7, ha='center', va='bottom', alpha=0.8)
 
-    ax1.set_title(f'Adaptive SuperTrend Indicator ({stock_name})', fontsize=16)
-    ax1.set_ylabel('Price')
+    ax1.set_title(f'Adaptive SuperTrend Indicator ({stock_name})', fontsize=16, pad=20)
+    ax1.set_ylabel('Price', labelpad=10) 
     ax1.grid(True, alpha=0.3)
-    ax1.legend(loc='upper left')
+    ax1.legend(loc='upper left', bbox_to_anchor=(0, 1.02))
     ax1.set_ylim(plot_df['Low'].min() * 0.98, plot_df['High'].max() * 1.05)
 
     # ====== Subplot 2: ATR + Centroids + Cluster Labels ======
@@ -423,6 +438,102 @@ def example():
     return result
 
 
-# If the script is run directly, execute the example
+def get_adaptive_supertrend_json(settings):
+    """
+    Calculates the Adaptive SuperTrend indicator for a given ticker using supplied settings.
+    Returns a JSON string with the following structure:
+    
+        {
+          "success": true/false,
+          "error": <error message or null>,
+          "data": [
+            {
+              "Date": <ISO date>,
+              "ADAPT_SUPERT": <indicator value>,
+              "Close": <close price>,
+              "up1": 1 (for upward) or 0 (for downward) or null (if no signal)
+            },
+            ...
+          ]
+        }
+    
+    Parameters:
+    -----------
+    ticker : str
+        Ticker symbol (e.g., 'AAPL', 'RELIANCE.NS').
+    settings : dict
+        Dictionary with adaptive settings. Expected keys include:
+          - atr_len (default 10)
+          - factor (default 3.0)
+          - training_data_period (default 100)
+          - highvol (default 0.75)
+          - midvol (default 0.5)
+          - lowvol (default 0.25)
+          - high_multiplier (default 2.0)
+          - mid_multiplier (default 3.0)
+          - low_multiplier (default 4.0)
+          - days (default 700)
+    
+    Returns:
+    --------
+    str
+        JSON string containing the data along with success/error fields.
+    """
+
+    try:
+        ticker = settings["ticker"]
+        df = historical_data(ticker, '1d', days=settings.get('days', 700))
+        result = adaptive_supertrend(
+            df,
+            atr_len=settings.get('atr_len', 10),
+            factor=settings.get('factor', 3.0),
+            training_data_period=settings.get('training_data_period', 100),
+            highvol=settings.get('highvol', 0.75),
+            midvol=settings.get('midvol', 0.5),
+            lowvol=settings.get('lowvol', 0.25),
+            high_multiplier=settings.get('high_multiplier', 2.0),
+            mid_multiplier=settings.get('mid_multiplier', 3.0),
+            low_multiplier=settings.get('low_multiplier', 4.0)
+        )
+        
+        # Compute a single signal field "up1"
+        # upward signal: previous ADAPT_SUPERTd == 1 and current ADAPT_SUPERTd == -1 → up1 = 1
+        # downward signal: previous ADAPT_SUPERTd == -1 and current ADAPT_SUPERTd == 1 → up1 = 0
+        result['up1'] = result['ADAPT_SUPERTd']
+        
+        result_reset = result.reset_index()
+        output_df = result_reset[['Date', 'ADAPT_SUPERT', 'Close', 'up1']]
+        data_records = output_df.to_dict(orient='records')
+        response = {
+            "success": True,
+            "error": None,
+            "data": data_records
+        }
+        return json.dumps(response, default=str)
+    
+    except Exception as e:
+        response = {
+            "success": False,
+            "error": str(e),
+            "data": None
+        }
+        return json.dumps(response)
+
+
+# Example usage of the new JSON function
 if __name__ == "__main__":
-    example()
+    settings = {
+        "ticker" : "RELIANCE.NS",
+        "atr_len": 10,
+        "factor": 3.0,
+        "training_data_period": 100,
+        "highvol": 0.75,
+        "midvol": 0.5,
+        "lowvol": 0.25,
+        "high_multiplier": 2.0,
+        "mid_multiplier": 3.0,
+        "low_multiplier": 4.0,
+        "days": 700
+    }
+    json_response = get_adaptive_supertrend_json(settings)
+    print(json_response)
