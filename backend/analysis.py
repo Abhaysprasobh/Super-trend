@@ -95,12 +95,12 @@ def backtest_comparison(symbol, interval='1d', days=700, initial_capital=100000)
     strategies = {
         "SuperTrend": {
             "type": "standard",
-            "length": 10,
+            "length": 14,
             "multiplier": 3.0
         },
         "Adaptive SuperTrend": {
             "type": "adaptive",
-            "atr_len": 10,
+            "atr_len": 14,
             "factor": 3.0,
             "training_period": 75
         }
@@ -445,8 +445,7 @@ def main():
 
     # Get indicator comparison data
     print(f"\nAnalyzing {symbol} for the last {days} days...\n")
-    
-    try:
+    if True:
         # Get complete analysis using api_get_indicator_comparison
         results = api_get_indicator_comparison(symbol, interval, days)
         
@@ -473,8 +472,6 @@ def main():
             for year, ret in zip(data['years'], data['returns']):
                 print(f"{year}: {ret:.2f}%")
 
-    except Exception as e:
-        print(f"An error occurred: {str(e)}")
 
 if __name__ == "__main__":
     main()

@@ -6,6 +6,7 @@ import matplotlib.dates as mdates
 import yfinance as yf
 import datetime
 
+
 def adaptive_supertrend(df, atr_len=10, factor=3.0, training_data_period=100, 
                         highvol=0.75, midvol=0.5, lowvol=0.25,
                         high='High', low='Low', close='Close'):
@@ -56,8 +57,14 @@ def adaptive_supertrend(df, atr_len=10, factor=3.0, training_data_period=100,
     df['high_vol_size'] = np.nan
     df['mid_vol_size'] = np.nan
     df['low_vol_size'] = np.nan
-    df['supertrend'] = np.nan
-    df['direction'] = np.nan
+    
+    # Initialize SuperTrend columns as requested
+    df['ADAPT_SUPERT'] = np.nan    # Trend value
+    df['ADAPT_SUPERTd'] = np.nan   # Direction (1 for bullish, -1 for bearish)
+    df['ADAPT_SUPERTl'] = np.nan   # Long band
+    df['ADAPT_SUPERTs'] = np.nan   # Short band
+    df['upper_band'] = np.nan      # Upper band
+    df['lower_band'] = np.nan      # Lower band
     
     # Process data only after we have enough history
     for i in range(training_data_period, len(df)):
@@ -129,165 +136,160 @@ def adaptive_supertrend(df, atr_len=10, factor=3.0, training_data_period=100,
 
 
 def calculate_supertrend_row(df, i, factor, atr_value, high='High', low='Low', close='Close'):
-    """Calculate SuperTrend for a single row"""
+    """
+    Calculate SuperTrend for a single row
+    Parameters:
+    -----------
+    df : pandas.DataFrame
+        DataFrame with price data
+    i : int
+        Current row index
+    factor : float
+        SuperTrend multiplier
+    atr_value : float
+        Current ATR value or volatility measure
+    high, low, close : str
+        Column names for High, Low, Close prices
+    """
+    # Calculate middle price
     hl2 = (df[high].iloc[i] + df[low].iloc[i]) / 2
     
     # Calculate bands
     upper_band = hl2 + factor * atr_value
     lower_band = hl2 - factor * atr_value
     
-    # Adjust bands based on previous values (for 'locking' mechanism)
-    if i > 0:
-        # Explicitly convert to float to ensure scalar values
-        prev_supertrend = float(df['supertrend'].iloc[i-1])
-        prev_direction = float(df['direction'].iloc[i-1])
-        curr_close = float(df[close].iloc[i])
-        prev_close = float(df[close].iloc[i-1])
+    # Store raw band values
+    df.iloc[i, df.columns.get_loc('upper_band')] = upper_band
+    df.iloc[i, df.columns.get_loc('lower_band')] = lower_band
+    
+    # Initialize with default values if first row
+    if i == 0 or pd.isna(df['ADAPT_SUPERTd'].iloc[i-1]):
+        df.iloc[i, df.columns.get_loc('ADAPT_SUPERTd')] = 1  # Default to bullish
+        df.iloc[i, df.columns.get_loc('ADAPT_SUPERT')] = lower_band
+        df.iloc[i, df.columns.get_loc('ADAPT_SUPERTl')] = lower_band  # Long band
+        df.iloc[i, df.columns.get_loc('ADAPT_SUPERTs')] = upper_band  # Short band
+        return
+    
+    # Get previous values
+    prev_trend = df['ADAPT_SUPERT'].iloc[i-1]
+    prev_direction = df['ADAPT_SUPERTd'].iloc[i-1]
+    prev_upper_band = df['upper_band'].iloc[i-1] if i > 0 and not pd.isna(df['upper_band'].iloc[i-1]) else upper_band
+    prev_lower_band = df['lower_band'].iloc[i-1] if i > 0 and not pd.isna(df['lower_band'].iloc[i-1]) else lower_band
+    curr_close = df[close].iloc[i]
+    
+    # Calculate final upper and lower bands with proper locking mechanism
+    final_upper_band = upper_band
+    final_lower_band = lower_band
+    
+    # Implement proper band locking logic
+    if prev_direction == 1:  # Previous trend was up (bullish)
+        # Update upper band (no locking for upper band in bullish trend)
+        final_upper_band = upper_band
         
-        # If no previous data, initialize
-        if pd.isna(prev_supertrend) or pd.isna(prev_direction):
-            direction = 1  # Default to bullish
-            supertrend = lower_band
+        # Lock lower band if needed
+        final_lower_band = max(lower_band, prev_lower_band) if curr_close > prev_lower_band else lower_band
+    else:  # Previous trend was down (bearish)
+        # Lock upper band if needed
+        final_upper_band = min(upper_band, prev_upper_band) if curr_close < prev_upper_band else upper_band
+        
+        # Update lower band (no locking for lower band in bearish trend)
+        final_lower_band = lower_band
+    
+    # Determine new trend direction
+    if prev_direction == 1:  # Previous trend was up
+        if curr_close < prev_trend:
+            # Trend changes to bearish
+            direction = -1
+            trend_value = final_upper_band
         else:
-            # Logic for SuperTrend calculation
-            if prev_direction == 1:  # Previous trend was up
-                if curr_close < prev_supertrend:
-                    direction = -1  # Switch to bearish
-                    supertrend = upper_band
-                else:
-                    direction = 1
-                    supertrend = max(lower_band, prev_supertrend)  # Lock the lowerband
-            else:  # Previous trend was down
-                if curr_close > prev_supertrend:
-                    direction = 1  # Switch to bullish
-                    supertrend = lower_band
-                else:
-                    direction = -1
-                    supertrend = min(upper_band, prev_supertrend)  # Lock the upperband
-    else:
-        # First valid row, initialize
-        direction = 1
-        supertrend = lower_band
+            # Continue bullish trend
+            direction = 1
+            trend_value = final_lower_band
+    else:  # Previous trend was down
+        if curr_close > prev_trend:
+            # Trend changes to bullish
+            direction = 1
+            trend_value = final_lower_band
+        else:
+            # Continue bearish trend
+            direction = -1
+            trend_value = final_upper_band
     
     # Store values
-    df.iloc[i, df.columns.get_loc('supertrend')] = supertrend
-    df.iloc[i, df.columns.get_loc('direction')] = direction
+    df.iloc[i, df.columns.get_loc('ADAPT_SUPERT')] = trend_value
+    df.iloc[i, df.columns.get_loc('ADAPT_SUPERTd')] = direction
 
 
-def plot_adaptive_supertrend(df, include_centroids=True):
+
+
+def plot_adaptive_supertrend(stock_name, df, fill_alpha=0.25):
     """
-    Plot the Adaptive SuperTrend indicator results
+    Plot the Adaptive SuperTrend indicator with single color-changing line
     
     Parameters:
     -----------
+    stock_name : str
+        Name of the stock for the title
     df : pandas.DataFrame
         DataFrame with calculated Adaptive SuperTrend values
-    include_centroids : bool
-        Whether to include centroid values in the plots
+    fill_alpha : float
+        Alpha transparency for optional elements
     """
-    # Filter out NaN values for plotting
-    plot_df = df.dropna(subset=['supertrend'])
+    import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
+    import numpy as np
+    import pandas as pd
+
+    # Drop rows where SuperTrend is NaN
+    plot_df = df.dropna(subset=['ADAPT_SUPERT'])
     
-    # Create figure with subplots
-    fig = plt.figure(figsize=(15, 10))
-    
-    if include_centroids:
-        # Create 3 subplots: price/supertrend, volatility/centroids, volatility regime
-        gs = plt.GridSpec(3, 1, height_ratios=[3, 1, 1], hspace=0.1)
-        ax1 = plt.subplot(gs[0])
-        ax2 = plt.subplot(gs[1], sharex=ax1)
-        ax3 = plt.subplot(gs[2], sharex=ax1)
-    else:
-        # Create 2 subplots: price/supertrend and volatility regime
-        gs = plt.GridSpec(2, 1, height_ratios=[3, 1], hspace=0.1)
-        ax1 = plt.subplot(gs[0])
-        ax3 = plt.subplot(gs[1], sharex=ax1)
-        ax2 = None
-    
-    # Plot price
-    ax1.plot(plot_df.index, plot_df['Close'], label='Close', color='black', alpha=0.5)
-    
-    # Plot SuperTrend
-    bullish = plot_df['direction'] == 1
-    bearish = plot_df['direction'] == -1
-    
-    ax1.plot(plot_df.index[bullish], plot_df['supertrend'][bullish], 
-             color='green', linewidth=1.5, label='SuperTrend (Bullish)')
-    ax1.plot(plot_df.index[bearish], plot_df['supertrend'][bearish], 
-             color='red', linewidth=1.5, label='SuperTrend (Bearish)')
-    
-    # Plot trend changes
-    trend_changes_bullish = (plot_df['direction'].shift() == -1) & (plot_df['direction'] == 1)
-    trend_changes_bearish = (plot_df['direction'].shift() == 1) & (plot_df['direction'] == -1)
-    
-    ax1.scatter(plot_df.index[trend_changes_bullish], plot_df['supertrend'][trend_changes_bullish], 
-                color='green', marker='^', s=100, label='Buy Signal')
-    ax1.scatter(plot_df.index[trend_changes_bearish], plot_df['supertrend'][trend_changes_bearish], 
-                color='red', marker='v', s=100, label='Sell Signal')
-    
-    # Plot volatility and centroids
-    if include_centroids and ax2 is not None:
-        ax2.plot(plot_df.index, plot_df['volatility'], label='ATR', color='purple', alpha=0.7)
-        
-        # Plot centroids if they exist
-        if 'high_vol_centroid' in plot_df.columns:
-            ax2.plot(plot_df.index, plot_df['high_vol_centroid'], 
-                     label='High Vol', color='red', linestyle='--', alpha=0.7)
-            ax2.plot(plot_df.index, plot_df['mid_vol_centroid'], 
-                     label='Mid Vol', color='orange', linestyle='--', alpha=0.7)
-            ax2.plot(plot_df.index, plot_df['low_vol_centroid'], 
-                     label='Low Vol', color='green', linestyle='--', alpha=0.7)
-            
-        ax2.set_ylabel('ATR / Centroids')
-        ax2.legend(loc='upper right', fontsize=8)
-        ax2.grid(True, alpha=0.3)
-    
-    # Plot cluster/volatility regime
+    fig, ax = plt.subplots(figsize=(15, 7))
+
+    # Plot the closing price
+    ax.plot(plot_df.index, plot_df['Close'], label='Close', color='black', alpha=0.6)
+
+    # Extract SuperTrend data
+    trend = plot_df['ADAPT_SUPERT'].values
+    direction = plot_df['ADAPT_SUPERTd'].values
+    dates = mdates.date2num(plot_df.index)
+
+    # Plot single line with color by trend direction
+    for i in range(1, len(trend)):
+        color = 'green' if direction[i] == 1 else 'red'
+        ax.plot(dates[i-1:i+1], trend[i-1:i+1], color=color, linewidth=1.8)
+
+    # Plot buy/sell markers
+    bullish_cross = (plot_df['ADAPT_SUPERTd'].shift() == -1) & (plot_df['ADAPT_SUPERTd'] == 1)
+    bearish_cross = (plot_df['ADAPT_SUPERTd'].shift() == 1) & (plot_df['ADAPT_SUPERTd'] == -1)
+
+    ax.scatter(plot_df.index[bullish_cross], plot_df['ADAPT_SUPERT'][bullish_cross] * 0.99,
+               color='green', marker='^', s=100, label='Buy Signal')
+
+    ax.scatter(plot_df.index[bearish_cross], plot_df['ADAPT_SUPERT'][bearish_cross] * 1.01,
+               color='red', marker='v', s=100, label='Sell Signal')
+
+    # Optional: Plot cluster labels
     if 'cluster' in plot_df.columns:
-        # Define colors and labels for volatility levels
-        colors = {0: 'red', 1: 'orange', 2: 'green'}
-        labels = {0: 'High', 1: 'Medium', 2: 'Low'}
-        
-        # Create colored rectangles for each cluster value
-        for i in range(len(plot_df)-1):
-            if pd.isna(plot_df['cluster'].iloc[i]):
-                continue
-                
-            cluster = int(plot_df['cluster'].iloc[i])
-            start_date = plot_df.index[i]
-            
-            # Find next date or end of dataframe
-            if i+1 < len(plot_df):
-                end_date = plot_df.index[i+1]
-            else:
-                end_date = start_date + pd.Timedelta(days=1)  # Just add a day for visualization
-                
-            # Convert dates to numbers for plotting
-            start_num = mdates.date2num(start_date)
-            end_num = mdates.date2num(end_date)
-            
-            # Add rectangle patch
-            rect = plt.Rectangle((start_num, cluster-0.4), end_num-start_num, 0.8, 
-                                color=colors.get(cluster, 'gray'), alpha=0.7)
-            ax3.add_patch(rect)
-        
-        # Set y-ticks and labels for volatility regimes
-        ax3.set_ylim(-0.5, 2.5)
-        ax3.set_yticks([0, 1, 2])
-        ax3.set_yticklabels(['High', 'Medium', 'Low'])
-        ax3.set_ylabel('Volatility\nRegime')
-        ax3.grid(True, alpha=0.3)
-    
-    # Customize primary axis
-    ax1.set_title('Adaptive SuperTrend Indicator', fontsize=16)
-    ax1.set_ylabel('Price')
-    ax1.grid(True, alpha=0.3)
-    ax1.legend(loc='upper left')
-    
-    # Improve x-axis date formatting
-    ax3.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-    plt.setp(ax3.get_xticklabels(), rotation=45, ha='right')
-    
+        cluster_colors = {0: 'orange', 1: 'purple', 2: 'blue'}
+        unique_clusters = plot_df['cluster'].dropna().astype(int).unique()
+        for cluster in unique_clusters:
+            changes = (plot_df['cluster'] == cluster) & (plot_df['cluster'].shift() != cluster)
+            for idx in np.where(changes)[0]:
+                date = plot_df.index[idx]
+                y = plot_df['ADAPT_SUPERT'].iloc[idx]
+                ax.text(date, y, f"{int(cluster)+1}", color=cluster_colors.get(cluster, 'gray'),
+                        fontsize=9, weight='bold', ha='center',
+                        bbox=dict(facecolor='white', alpha=0.6, edgecolor=cluster_colors.get(cluster, 'gray')))
+
+    # Final touches
+    ax.set_title(f'Adaptive SuperTrend Indicator ({stock_name})', fontsize=16)
+    ax.set_ylabel('Price')
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc='upper left')
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
+    ax.set_ylim(plot_df['Low'].min() * 0.98, plot_df['High'].max() * 1.02)
+
     plt.tight_layout()
     return fig
 
@@ -324,27 +326,31 @@ def historical_data(symbol, interval, days=700):
 
 
 def example():
+    stock_name = 'RELIANCE.NS'
+
     """
     Run an example of the Adaptive SuperTrend indicator on AAPL stock
     """
-    print("Downloading AAPL data...")
+    print(f"Downloading {stock_name} data...")
     # Download sample data
-    df = historical_data('RELIANCE.NS', '1d', 700)
+    df = historical_data(stock_name, '1d', 700)
     
     print("Calculating Adaptive SuperTrend...")
     # Calculate Adaptive SuperTrend
     result = adaptive_supertrend(df)
-    print(result.columns)
+    result.to_excel(f'{stock_name}_adaptive_supertrend.xlsx')
+
+    
     print("Plotting results...")
     # Plot results
-    fig = plot_adaptive_supertrend(result)
+    fig = plot_adaptive_supertrend(stock_name, result)
     plt.show()  # This actually displays the plot
     
     # Print some statistics
     print("\nSuperTrend Statistics:")
-    print(f"Number of bullish trends: {(result['direction'] == 1).sum()}")
-    print(f"Number of bearish trends: {(result['direction'] == -1).sum()}")
-    print(f"Number of trend changes: {(result['direction'] != result['direction'].shift()).sum()}")
+    print(f"Number of bullish trends: {(result['ADAPT_SUPERTd'] == 1).sum()}")
+    print(f"Number of bearish trends: {(result['ADAPT_SUPERTd'] == -1).sum()}")
+    print(f"Number of trend changes: {(result['ADAPT_SUPERTd'] != result['ADAPT_SUPERTd'].shift()).sum()}")
     
     print("\nVolatility Regime Statistics:")
     print(f"High volatility days: {(result['cluster'] == 0).sum()}")

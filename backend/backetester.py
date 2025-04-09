@@ -413,8 +413,8 @@ def backtest_supertrend_strategies(df, strategies_config, initial_capital=100000
                 factor=config.get('factor', 3.0),
                 training_data_period=config.get('training_period', 100)
             )
-            indicator_col = 'supertrend'
-            direction_col = 'direction'
+            indicator_col = 'ADAPT_SUPERT'
+            direction_col = 'ADAPT_SUPERTd'
         
         else:
             print(f"Unknown strategy type: {config.get('type')}")
