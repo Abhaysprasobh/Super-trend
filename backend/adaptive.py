@@ -1,17 +1,69 @@
 import pandas as pd
 import numpy as np
-from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import yfinance as yf
 import datetime
 
 
+def custom_kmeans(data, initial_centroids, max_iter=100, tolerance=1e-6):
+    """    
+    Parameters:
+    -----------
+    data : numpy.ndarray
+        1D array of data points to cluster
+    initial_centroids : numpy.ndarray
+        Initial centroid values
+    max_iter : int
+        Maximum number of iterations
+    tolerance : float
+        Convergence threshold
+        
+    Returns:
+    --------
+    centroids : numpy.ndarray
+        Final centroid values
+    clusters : numpy.ndarray
+        Cluster assignments for each data point
+    """
+    # Reshape data to 1D if needed
+    data_1d = data.flatten()
+    centroids = initial_centroids.copy()
+    
+    for iteration in range(max_iter):
+        # Calculate distances from each point to each centroid
+        distances = np.abs(data_1d.reshape(-1, 1) - centroids.reshape(1, -1))
+        
+        # Assign points to nearest centroid
+        clusters = np.argmin(distances, axis=1)
+        
+        # Calculate new centroids
+        new_centroids = np.array([data_1d[clusters == k].mean() if np.sum(clusters == k) > 0 
+                                  else centroids[k] for k in range(len(centroids))])
+        
+        # Check for convergence
+        if np.allclose(new_centroids, centroids, atol=tolerance):
+            break
+            
+        centroids = new_centroids
+    
+    # Sort centroids in descending order and remap clusters
+    centroid_indices = np.argsort(centroids)[::-1]  # Descending order
+    sorted_centroids = centroids[centroid_indices]
+    
+    # Remap cluster labels based on sorted centroids
+    remapped_clusters = np.zeros_like(clusters)
+    for new_idx, old_idx in enumerate(centroid_indices):
+        remapped_clusters[clusters == old_idx] = new_idx
+        
+    return sorted_centroids, remapped_clusters
+
+
 def adaptive_supertrend(df, atr_len=10, factor=3.0, training_data_period=100, 
                         highvol=0.75, midvol=0.5, lowvol=0.25,
                         high='High', low='Low', close='Close'):
     """
-    Machine Learning Adaptive SuperTrend Indicator
+    Machine Learning Adaptive SuperTrend Indicator 
     
     Parameters:
     -----------
@@ -22,7 +74,7 @@ def adaptive_supertrend(df, atr_len=10, factor=3.0, training_data_period=100,
     factor : float
         SuperTrend factor
     training_data_period : int
-        Length of training data for k-means clustering
+        Length of training data for custom k-means clustering
     highvol : float
         Initial high volatility percentile guess (0-1)
     midvol : float
@@ -35,8 +87,7 @@ def adaptive_supertrend(df, atr_len=10, factor=3.0, training_data_period=100,
     Returns:
     --------
     pandas.DataFrame
-        Original dataframe with additional columns for SuperTrend values,
-        direction, cluster assignments, and centroids
+        Original dataframe with additional columns for SuperTrend values
     """
     df = df.copy()
     
@@ -58,9 +109,9 @@ def adaptive_supertrend(df, atr_len=10, factor=3.0, training_data_period=100,
     df['mid_vol_size'] = np.nan
     df['low_vol_size'] = np.nan
     
-    # Initialize SuperTrend columns as requested
+    # Initialize SuperTrend columns (Pine Script convention)
     df['ADAPT_SUPERT'] = np.nan    # Trend value
-    df['ADAPT_SUPERTd'] = np.nan   # Direction (1 for bullish, -1 for bearish)
+    df['ADAPT_SUPERTd'] = np.nan   # Direction (-1 for bullish, 1 for bearish in Pine)
     df['ADAPT_SUPERTl'] = np.nan   # Long band
     df['ADAPT_SUPERTs'] = np.nan   # Short band
     df['upper_band'] = np.nan      # Upper band
@@ -82,23 +133,12 @@ def adaptive_supertrend(df, atr_len=10, factor=3.0, training_data_period=100,
         medium_volatility = lower + (upper - lower) * midvol
         low_volatility = lower + (upper - lower) * lowvol
         
-        initial_centroids = np.array([[high_volatility], [medium_volatility], [low_volatility]])
+        initial_centroids = np.array([high_volatility, medium_volatility, low_volatility])
         
-        # Perform k-means clustering with 3 clusters and our initial centroids
-        kmeans = KMeans(n_clusters=3, init=initial_centroids, n_init=1)
-        kmeans.fit(window)
-        
-        # Get centroids and sort them in descending order (high to low)
-        centroids = kmeans.cluster_centers_.flatten()
-        centroid_indices = np.argsort(-centroids)  # Descending order
-        centroids = centroids[centroid_indices]
+        # Use custom K-means clustering that matches Pine Script behavior
+        centroids, remapped_labels = custom_kmeans(window, initial_centroids)
         
         high_vol_centroid, mid_vol_centroid, low_vol_centroid = centroids
-        
-        # Remap labels based on sorted centroids
-        remapped_labels = np.zeros_like(kmeans.labels_)
-        for new_idx, old_idx in enumerate(centroid_indices):
-            remapped_labels[kmeans.labels_ == old_idx] = new_idx
             
         # Count points in each cluster
         high_vol_size = np.sum(remapped_labels == 0)
@@ -110,12 +150,7 @@ def adaptive_supertrend(df, atr_len=10, factor=3.0, training_data_period=100,
         if pd.isna(current_vol):
             continue
             
-        distances = [
-            abs(current_vol - high_vol_centroid),
-            abs(current_vol - mid_vol_centroid),
-            abs(current_vol - low_vol_centroid)
-        ]
-        
+        distances = np.abs(current_vol - centroids)
         cluster = np.argmin(distances)
         assigned_centroid = centroids[cluster]
         
@@ -129,7 +164,7 @@ def adaptive_supertrend(df, atr_len=10, factor=3.0, training_data_period=100,
         df.iloc[i, df.columns.get_loc('mid_vol_size')] = mid_vol_size
         df.iloc[i, df.columns.get_loc('low_vol_size')] = low_vol_size
         
-        # Calculate SuperTrend with the assigned centroid
+        # Calculate SuperTrend with the assigned centroid (matching Pine Script convention)
         calculate_supertrend_row(df, i, factor, assigned_centroid, high, low, close)
     
     return df
@@ -137,7 +172,8 @@ def adaptive_supertrend(df, atr_len=10, factor=3.0, training_data_period=100,
 
 def calculate_supertrend_row(df, i, factor, atr_value, high='High', low='Low', close='Close'):
     """
-    Calculate SuperTrend for a single row
+    Calculate SuperTrend for a single row (corrected to match Pine Script convention)
+    
     Parameters:
     -----------
     df : pandas.DataFrame
@@ -164,7 +200,8 @@ def calculate_supertrend_row(df, i, factor, atr_value, high='High', low='Low', c
     
     # Initialize with default values if first row
     if i == 0 or pd.isna(df['ADAPT_SUPERTd'].iloc[i-1]):
-        df.iloc[i, df.columns.get_loc('ADAPT_SUPERTd')] = 1  # Default to bullish
+        # Initialize with default values (Pine Script: -1 for bullish)
+        df.iloc[i, df.columns.get_loc('ADAPT_SUPERTd')] = -1  # Default to bullish in Pine
         df.iloc[i, df.columns.get_loc('ADAPT_SUPERT')] = lower_band
         df.iloc[i, df.columns.get_loc('ADAPT_SUPERTl')] = lower_band  # Long band
         df.iloc[i, df.columns.get_loc('ADAPT_SUPERTs')] = upper_band  # Short band
@@ -177,51 +214,51 @@ def calculate_supertrend_row(df, i, factor, atr_value, high='High', low='Low', c
     prev_lower_band = df['lower_band'].iloc[i-1] if i > 0 and not pd.isna(df['lower_band'].iloc[i-1]) else lower_band
     curr_close = df[close].iloc[i]
     
-    # Calculate final upper and lower bands with proper locking mechanism
+    # Calculate final bands with proper locking mechanism (matching Pine Script)
     final_upper_band = upper_band
     final_lower_band = lower_band
     
-    # Implement proper band locking logic
-    if prev_direction == 1:  # Previous trend was up (bullish)
-        # Update upper band (no locking for upper band in bullish trend)
-        final_upper_band = upper_band
-        
-        # Lock lower band if needed
+    # Implement proper band locking logic (Pine convention: -1 is bullish)
+    if prev_direction == -1:  # Previous trend was bullish
+        # Lock the lower band in bullish trend (no change to upper band)
         final_lower_band = max(lower_band, prev_lower_band) if curr_close > prev_lower_band else lower_band
-    else:  # Previous trend was down (bearish)
-        # Lock upper band if needed
+        final_upper_band = upper_band
+    else:  # Previous trend was bearish (1)
+        # Lock the upper band in bearish trend (no change to lower band)
         final_upper_band = min(upper_band, prev_upper_band) if curr_close < prev_upper_band else upper_band
-        
-        # Update lower band (no locking for lower band in bearish trend)
         final_lower_band = lower_band
     
-    # Determine new trend direction
-    if prev_direction == 1:  # Previous trend was up
+    # Determine new trend direction (Pine convention: -1 is bullish, 1 is bearish)
+    if prev_direction == -1:  # Previous was bullish
         if curr_close < prev_trend:
             # Trend changes to bearish
-            direction = -1
+            direction = 1  # Bearish in Pine
             trend_value = final_upper_band
         else:
             # Continue bullish trend
-            direction = 1
+            direction = -1  # Bullish in Pine
             trend_value = final_lower_band
-    else:  # Previous trend was down
+    else:  # Previous was bearish (1)
         if curr_close > prev_trend:
             # Trend changes to bullish
-            direction = 1
+            direction = -1  # Bullish in Pine
             trend_value = final_lower_band
         else:
             # Continue bearish trend
-            direction = -1
+            direction = 1  # Bearish in Pine
             trend_value = final_upper_band
     
     # Store values
     df.iloc[i, df.columns.get_loc('ADAPT_SUPERT')] = trend_value
     df.iloc[i, df.columns.get_loc('ADAPT_SUPERTd')] = direction
+    df.iloc[i, df.columns.get_loc('ADAPT_SUPERTl')] = final_lower_band
+    df.iloc[i, df.columns.get_loc('ADAPT_SUPERTs')] = final_upper_band
+
 
 def plot_adaptive_supertrend(stock_name, df, fill_alpha=0.25):
     """
     Plot the Adaptive SuperTrend indicator and ATR with centroids and cluster labels.
+    Adjusted for Pine Script convention: -1 = bullish, 1 = bearish
     
     Parameters:
     -----------
@@ -232,11 +269,6 @@ def plot_adaptive_supertrend(stock_name, df, fill_alpha=0.25):
     fill_alpha : float
         Alpha transparency for optional elements
     """
-    import matplotlib.pyplot as plt
-    import matplotlib.dates as mdates
-    import numpy as np
-    import pandas as pd
-
     plot_df = df.dropna(subset=['ADAPT_SUPERT'])
     print("rows =", len(plot_df))
 
@@ -245,22 +277,22 @@ def plot_adaptive_supertrend(stock_name, df, fill_alpha=0.25):
     # ====== Subplot 1: Price + SuperTrend + Cluster Markers ======
     ax1.plot(plot_df.index, plot_df['Close'], label='Close', color='black', alpha=0.6)
 
-    # Adaptive SuperTrend line
+    # Adaptive SuperTrend line (adjusted for Pine Script convention)
     trend = plot_df['ADAPT_SUPERT'].values
     direction = plot_df['ADAPT_SUPERTd'].values
     dates = mdates.date2num(plot_df.index)
 
-    ax1.plot(dates[:2], trend[:2], color='green' if direction[1] == 1 else 'red',
+    ax1.plot(dates[:2], trend[:2], color='green' if direction[1] == -1 else 'red',
              linewidth=1.8, label='Bearish')
-    ax1.plot(dates[:2], trend[:2], color='red' if direction[1] == 1 else 'green',
+    ax1.plot(dates[:2], trend[:2], color='red' if direction[1] == -1 else 'green',
              linewidth=1.8, label='Bullish')
     for i in range(2, len(trend)):
-        color = 'green' if direction[i] == 1 else 'red'
-        ax1.plot(dates[i-1:i+1], trend[i-1:i+1] , color=color, linewidth=1.8)
+        color = 'green' if direction[i] == -1 else 'red'  # -1 is bullish in Pine
+        ax1.plot(dates[i-1:i+1], trend[i-1:i+1], color=color, linewidth=1.8)
 
-    # Buy/Sell signals
-    bullish_cross = (plot_df['ADAPT_SUPERTd'].shift() == -1) & (plot_df['ADAPT_SUPERTd'] == 1)
-    bearish_cross = (plot_df['ADAPT_SUPERTd'].shift() == 1) & (plot_df['ADAPT_SUPERTd'] == -1)
+    # Buy/Sell signals (adjusted for Pine Script convention)
+    bullish_cross = (plot_df['ADAPT_SUPERTd'].shift() == 1) & (plot_df['ADAPT_SUPERTd'] == -1)  # to bullish
+    bearish_cross = (plot_df['ADAPT_SUPERTd'].shift() == -1) & (plot_df['ADAPT_SUPERTd'] == 1)  # to bearish
 
     ax1.scatter(plot_df.index[bullish_cross], plot_df['ADAPT_SUPERT'][bullish_cross] * 0.99,
                 color='green', marker='^', s=100, label='Buy Signal')
@@ -268,11 +300,12 @@ def plot_adaptive_supertrend(stock_name, df, fill_alpha=0.25):
                 color='red', marker='v', s=100, label='Sell Signal')
 
     # Assigned cluster text on price chart
-    cluster_colors = {1: 'green', 2: 'orange', 3: 'red'}
     cluster_display = {0: ('3', 'red'), 1: ('2', 'orange'), 2: ('1', 'green')}
     for idx, row in plot_df.iterrows():
         cluster = row['cluster']
-        label, color = cluster_display.get(cluster, ('?', 'gray'))
+        if pd.isna(cluster):
+            continue
+        label, color = cluster_display.get(int(cluster), ('?', 'gray'))
         close_price = row['Close']
         ax1.text(idx, close_price * 1.01, label,
                 color=color, fontsize=7, ha='center', va='bottom', alpha=0.8)
@@ -291,13 +324,14 @@ def plot_adaptive_supertrend(stock_name, df, fill_alpha=0.25):
         ax2.plot(plot_df.index, plot_df['mid_vol_centroid'], label='Mid ATR Cluster', color='orange', linestyle='--', alpha=0.7)
         ax2.plot(plot_df.index, plot_df['high_vol_centroid'], label='High ATR Cluster', color='red', linestyle='--', alpha=0.7)
 
-
     if 'cluster' in plot_df.columns:
         cluster_change = plot_df['cluster'].ne(plot_df['cluster'].shift())
 
         for idx in plot_df[cluster_change].index:
-            cluster = int(plot_df.loc[idx, 'cluster'])
-            label, color = cluster_display.get(cluster, (f"C{cluster}", 'gray'))
+            cluster = plot_df.loc[idx, 'cluster']
+            if pd.isna(cluster):
+                continue
+            label, color = cluster_display.get(int(cluster), (f"C{int(cluster)}", 'gray'))
             y_pos = plot_df.loc[idx, 'volatility']
             ax2.text(
                 idx, y_pos, label,
@@ -305,7 +339,6 @@ def plot_adaptive_supertrend(stock_name, df, fill_alpha=0.25):
                 fontsize=9, ha='center', va='bottom',
                 bbox=dict(facecolor='white', edgecolor=color, alpha=0.6)
             )
-
 
     ax2.set_ylabel('ATR / Centroids')
     ax2.legend(loc='upper right', fontsize=8)
@@ -353,7 +386,7 @@ def example():
     stock_name = 'RELIANCE.NS'
 
     """
-    Run an example of the Adaptive SuperTrend indicator on AAPL stock
+    Run an example of the Adaptive SuperTrend indicator on the specified stock
     """
     print(f"Downloading {stock_name} data...")
     # Download sample data
@@ -363,23 +396,29 @@ def example():
     # Calculate Adaptive SuperTrend
     result = adaptive_supertrend(df)
     result.to_excel(f'{stock_name}_adaptive_supertrend.xlsx')
-
     
     print("Plotting results...")
     # Plot results
     fig = plot_adaptive_supertrend(stock_name, result)
     plt.show()  # This actually displays the plot
     
-    # Print some statistics
+    # Print some statistics (adjusted for Pine Script convention)
     print("\nSuperTrend Statistics:")
-    print(f"Number of bullish trends: {(result['ADAPT_SUPERTd'] == 1).sum()}")
-    print(f"Number of bearish trends: {(result['ADAPT_SUPERTd'] == -1).sum()}")
+    print(f"Number of bullish trends: {(result['ADAPT_SUPERTd'] == -1).sum()}")  # -1 is bullish
+    print(f"Number of bearish trends: {(result['ADAPT_SUPERTd'] == 1).sum()}")   # 1 is bearish
     print(f"Number of trend changes: {(result['ADAPT_SUPERTd'] != result['ADAPT_SUPERTd'].shift()).sum()}")
     
     print("\nVolatility Regime Statistics:")
     print(f"High volatility days: {(result['cluster'] == 0).sum()}")
     print(f"Medium volatility days: {(result['cluster'] == 1).sum()}")
     print(f"Low volatility days: {(result['cluster'] == 2).sum()}")
+    
+    # Print buy/sell signals
+    bullish_cross = (result['ADAPT_SUPERTd'].shift() == 1) & (result['ADAPT_SUPERTd'] == -1)  # to bullish
+    bearish_cross = (result['ADAPT_SUPERTd'].shift() == -1) & (result['ADAPT_SUPERTd'] == 1)  # to bearish
+    
+    print(f"\nNumber of buy signals: {bullish_cross.sum()}")
+    print(f"Number of sell signals: {bearish_cross.sum()}")
     
     return result
 
