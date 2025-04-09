@@ -219,12 +219,9 @@ def calculate_supertrend_row(df, i, factor, atr_value, high='High', low='Low', c
     df.iloc[i, df.columns.get_loc('ADAPT_SUPERT')] = trend_value
     df.iloc[i, df.columns.get_loc('ADAPT_SUPERTd')] = direction
 
-
-
-
 def plot_adaptive_supertrend(stock_name, df, fill_alpha=0.25):
     """
-    Plot the Adaptive SuperTrend indicator with single color-changing line
+    Plot the Adaptive SuperTrend indicator and ATR with centroids and cluster labels.
     
     Parameters:
     -----------
@@ -240,57 +237,84 @@ def plot_adaptive_supertrend(stock_name, df, fill_alpha=0.25):
     import numpy as np
     import pandas as pd
 
-    # Drop rows where SuperTrend is NaN
     plot_df = df.dropna(subset=['ADAPT_SUPERT'])
-    
-    fig, ax = plt.subplots(figsize=(15, 7))
+    print("rows =", len(plot_df))
 
-    # Plot the closing price
-    ax.plot(plot_df.index, plot_df['Close'], label='Close', color='black', alpha=0.6)
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 10), sharex=True, gridspec_kw={'height_ratios': [3, 1]})
 
-    # Extract SuperTrend data
+    # ====== Subplot 1: Price + SuperTrend + Cluster Markers ======
+    ax1.plot(plot_df.index, plot_df['Close'], label='Close', color='black', alpha=0.6)
+
+    # Adaptive SuperTrend line
     trend = plot_df['ADAPT_SUPERT'].values
     direction = plot_df['ADAPT_SUPERTd'].values
     dates = mdates.date2num(plot_df.index)
 
-    # Plot single line with color by trend direction
-    for i in range(1, len(trend)):
+    ax1.plot(dates[:2], trend[:2], color='green' if direction[1] == 1 else 'red',
+             linewidth=1.8, label='Bearish')
+    ax1.plot(dates[:2], trend[:2], color='red' if direction[1] == 1 else 'green',
+             linewidth=1.8, label='Bullish')
+    for i in range(2, len(trend)):
         color = 'green' if direction[i] == 1 else 'red'
-        ax.plot(dates[i-1:i+1], trend[i-1:i+1], color=color, linewidth=1.8)
+        ax1.plot(dates[i-1:i+1], trend[i-1:i+1] , color=color, linewidth=1.8)
 
-    # Plot buy/sell markers
+    # Buy/Sell signals
     bullish_cross = (plot_df['ADAPT_SUPERTd'].shift() == -1) & (plot_df['ADAPT_SUPERTd'] == 1)
     bearish_cross = (plot_df['ADAPT_SUPERTd'].shift() == 1) & (plot_df['ADAPT_SUPERTd'] == -1)
 
-    ax.scatter(plot_df.index[bullish_cross], plot_df['ADAPT_SUPERT'][bullish_cross] * 0.99,
-               color='green', marker='^', s=100, label='Buy Signal')
+    ax1.scatter(plot_df.index[bullish_cross], plot_df['ADAPT_SUPERT'][bullish_cross] * 0.99,
+                color='green', marker='^', s=100, label='Buy Signal')
+    ax1.scatter(plot_df.index[bearish_cross], plot_df['ADAPT_SUPERT'][bearish_cross] * 1.01,
+                color='red', marker='v', s=100, label='Sell Signal')
 
-    ax.scatter(plot_df.index[bearish_cross], plot_df['ADAPT_SUPERT'][bearish_cross] * 1.01,
-               color='red', marker='v', s=100, label='Sell Signal')
+    # Assigned cluster text on price chart
+    cluster_colors = {1: 'green', 2: 'orange', 3: 'red'}
+    cluster_display = {0: ('3', 'red'), 1: ('2', 'orange'), 2: ('1', 'green')}
+    for idx, row in plot_df.iterrows():
+        cluster = row['cluster']
+        label, color = cluster_display.get(cluster, ('?', 'gray'))
+        close_price = row['Close']
+        ax1.text(idx, close_price * 1.01, label,
+                color=color, fontsize=7, ha='center', va='bottom', alpha=0.8)
 
-    # Optional: Plot cluster labels
+    ax1.set_title(f'Adaptive SuperTrend Indicator ({stock_name})', fontsize=16)
+    ax1.set_ylabel('Price')
+    ax1.grid(True, alpha=0.3)
+    ax1.legend(loc='upper left')
+    ax1.set_ylim(plot_df['Low'].min() * 0.98, plot_df['High'].max() * 1.05)
+
+    # ====== Subplot 2: ATR + Centroids + Cluster Labels ======
+    ax2.plot(plot_df.index, plot_df['volatility'], label='Actual ATR', color='purple', alpha=0.7)
+
+    if all(col in plot_df.columns for col in ['low_vol_centroid', 'mid_vol_centroid', 'high_vol_centroid']):
+        ax2.plot(plot_df.index, plot_df['low_vol_centroid'], label='Low ATR Cluster', color='green', linestyle='--', alpha=0.7)
+        ax2.plot(plot_df.index, plot_df['mid_vol_centroid'], label='Mid ATR Cluster', color='orange', linestyle='--', alpha=0.7)
+        ax2.plot(plot_df.index, plot_df['high_vol_centroid'], label='High ATR Cluster', color='red', linestyle='--', alpha=0.7)
+
+
     if 'cluster' in plot_df.columns:
-        cluster_colors = {0: 'orange', 1: 'purple', 2: 'blue'}
-        unique_clusters = plot_df['cluster'].dropna().astype(int).unique()
-        for cluster in unique_clusters:
-            changes = (plot_df['cluster'] == cluster) & (plot_df['cluster'].shift() != cluster)
-            for idx in np.where(changes)[0]:
-                date = plot_df.index[idx]
-                y = plot_df['ADAPT_SUPERT'].iloc[idx]
-                ax.text(date, y, f"{int(cluster)+1}", color=cluster_colors.get(cluster, 'gray'),
-                        fontsize=9, weight='bold', ha='center',
-                        bbox=dict(facecolor='white', alpha=0.6, edgecolor=cluster_colors.get(cluster, 'gray')))
+        cluster_change = plot_df['cluster'].ne(plot_df['cluster'].shift())
 
-    # Final touches
-    ax.set_title(f'Adaptive SuperTrend Indicator ({stock_name})', fontsize=16)
-    ax.set_ylabel('Price')
-    ax.grid(True, alpha=0.3)
-    ax.legend(loc='upper left')
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-    plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
-    ax.set_ylim(plot_df['Low'].min() * 0.98, plot_df['High'].max() * 1.02)
+        for idx in plot_df[cluster_change].index:
+            cluster = int(plot_df.loc[idx, 'cluster'])
+            label, color = cluster_display.get(cluster, (f"C{cluster}", 'gray'))
+            y_pos = plot_df.loc[idx, 'volatility']
+            ax2.text(
+                idx, y_pos, label,
+                color=color,
+                fontsize=9, ha='center', va='bottom',
+                bbox=dict(facecolor='white', edgecolor=color, alpha=0.6)
+            )
 
+
+    ax2.set_ylabel('ATR / Centroids')
+    ax2.legend(loc='upper right', fontsize=8)
+    ax2.grid(True, alpha=0.3)
+
+    ax2.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    plt.setp(ax2.get_xticklabels(), rotation=45, ha='right')
     plt.tight_layout()
+
     return fig
 
 
