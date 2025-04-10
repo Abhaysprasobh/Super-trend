@@ -246,7 +246,7 @@ def supertrend_basic():
         return jsonify({'message': str(e)}), 500
 
 @app.route('/api/adaptive', methods=['POST'])
-@token_required
+# @token_required
 def adaptive_supertrend(current_user):
     data = request.get_json()
     try:

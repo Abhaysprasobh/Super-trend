@@ -74,6 +74,26 @@ export async function fetchIndicatorComparison(symbol, interval, days) {
   return await response.json();
 }
 
+export const fetchSupertrend = async (ticker, range = "1mo", length = 7, multiplier = 3.0) => {
+  try {
+    const response = await apiClient.get("/api/supertrend", {
+      params: { ticker, range, length, multiplier },
+    });
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error);
+  }
+};
+
+export const fetchAdaptiveSupertrend = async (data) => {
+  try {
+    const response = await apiClient.post("/api/adaptive", data);
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error);
+  }
+};
+
   // Fetch user details
   export const getUserData = async () => {
     try {
