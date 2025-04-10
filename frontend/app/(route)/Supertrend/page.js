@@ -1,11 +1,11 @@
 
-import;
+import SupertrendPage from "@/app/_components/SupertrendPage";
 
 
 export default function Home() {
   return (
       <div>
-        <IndicatorComparison />
+        <SupertrendPage />
       </div>
   );
 }

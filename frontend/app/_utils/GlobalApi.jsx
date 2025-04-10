@@ -74,10 +74,10 @@ export async function fetchIndicatorComparison(symbol, interval, days) {
   return await response.json();
 }
 
-export const fetchSupertrend = async (ticker, range = "1mo", length = 7, multiplier = 3.0) => {
+export const fetchSupertrend = async (params) => {
   try {
     const response = await apiClient.get("/api/supertrend", {
-      params: { ticker, range, length, multiplier },
+      params,
     });
     return response.data;
   } catch (error) {
