@@ -6,7 +6,7 @@ import Link from 'next/link';
 
 
 function Header() {
-    const [isLogin, setIsLogin] = useState(false);
+    const [isLogin, setIsLogin] = useState(true);
 
     // Move localStorage logic into useEffect to avoid hydration errors
     React.useEffect(() => {
