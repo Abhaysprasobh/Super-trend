@@ -243,7 +243,6 @@ def calculate_supertrend_row(df, i, factor, atr_value, high='High', low='Low', c
         final_upper_band = min(upper_band, prev_upper_band) if curr_close < prev_upper_band else upper_band
         final_lower_band = lower_band
     
-    # Determine new trend direction (Pine convention: -1 is bullish, 1 is bearish)
     if prev_direction == -1:  # Previous was bullish
         if curr_close < prev_trend:
             # Trend changes to bearish
@@ -397,47 +396,6 @@ def historical_data(symbol, interval, days=700):
     return data
 
 
-def example():
-    stock_name = 'RELIANCE.NS'
-
-    """
-    Run an example of the Adaptive SuperTrend indicator on the specified stock
-    """
-    print(f"Downloading {stock_name} data...")
-    # Download sample data
-    df = historical_data(stock_name, '1d', 700)
-    
-    print("Calculating Adaptive SuperTrend...")
-    # Calculate Adaptive SuperTrend
-    result = adaptive_supertrend(df)
-    result.to_excel(f'{stock_name}_adaptive_supertrend.xlsx')
-    
-    print("Plotting results...")
-    # Plot results
-    fig = plot_adaptive_supertrend(stock_name, result)
-    plt.show()  # This actually displays the plot
-    
-    # Print some statistics (adjusted for Pine Script convention)
-    print("\nSuperTrend Statistics:")
-    print(f"Number of bullish trends: {(result['ADAPT_SUPERTd'] == -1).sum()}")  # -1 is bullish
-    print(f"Number of bearish trends: {(result['ADAPT_SUPERTd'] == 1).sum()}")   # 1 is bearish
-    print(f"Number of trend changes: {(result['ADAPT_SUPERTd'] != result['ADAPT_SUPERTd'].shift()).sum()}")
-    
-    print("\nVolatility Regime Statistics:")
-    print(f"High volatility days: {(result['cluster'] == 0).sum()}")
-    print(f"Medium volatility days: {(result['cluster'] == 1).sum()}")
-    print(f"Low volatility days: {(result['cluster'] == 2).sum()}")
-    
-    # Print buy/sell signals
-    bullish_cross = (result['ADAPT_SUPERTd'].shift() == 1) & (result['ADAPT_SUPERTd'] == -1)  # to bullish
-    bearish_cross = (result['ADAPT_SUPERTd'].shift() == -1) & (result['ADAPT_SUPERTd'] == 1)  # to bearish
-    
-    print(f"\nNumber of buy signals: {bullish_cross.sum()}")
-    print(f"Number of sell signals: {bearish_cross.sum()}")
-    
-    return result
-
-
 def get_adaptive_supertrend_json(settings):
     """
     Calculates the Adaptive SuperTrend indicator for a given ticker using supplied settings.
@@ -537,3 +495,44 @@ if __name__ == "__main__":
     }
     json_response = get_adaptive_supertrend_json(settings)
     print(json_response)
+
+
+    
+    stock_name = 'RELIANCE.NS'
+
+    """
+    Run an example of the Adaptive SuperTrend indicator on the specified stock
+    """
+    print(f"Downloading {stock_name} data...")
+    # Download sample data
+    df = historical_data(stock_name, '1d', 700)
+    
+    print("Calculating Adaptive SuperTrend...")
+    # Calculate Adaptive SuperTrend
+    result = adaptive_supertrend(df)
+    result.to_excel(f'{stock_name}_adaptive_supertrend.xlsx')
+    
+    print("Plotting results...")
+    # Plot results
+    fig = plot_adaptive_supertrend(stock_name, result)
+    plt.show()  # This actually displays the plot
+    
+    # Print some statistics (adjusted for Pine Script convention)
+    print("\nSuperTrend Statistics:")
+    print(f"Number of bullish trends: {(result['ADAPT_SUPERTd'] == -1).sum()}")  # -1 is bullish
+    print(f"Number of bearish trends: {(result['ADAPT_SUPERTd'] == 1).sum()}")   # 1 is bearish
+    print(f"Number of trend changes: {(result['ADAPT_SUPERTd'] != result['ADAPT_SUPERTd'].shift()).sum()}")
+    
+    print("\nVolatility Regime Statistics:")
+    print(f"High volatility days: {(result['cluster'] == 0).sum()}")
+    print(f"Medium volatility days: {(result['cluster'] == 1).sum()}")
+    print(f"Low volatility days: {(result['cluster'] == 2).sum()}")
+    
+    # Print buy/sell signals
+    bullish_cross = (result['ADAPT_SUPERTd'].shift() == 1) & (result['ADAPT_SUPERTd'] == -1)  # to bullish
+    bearish_cross = (result['ADAPT_SUPERTd'].shift() == -1) & (result['ADAPT_SUPERTd'] == 1)  # to bearish
+    
+    print(f"\nNumber of buy signals: {bullish_cross.sum()}")
+    print(f"Number of sell signals: {bearish_cross.sum()}")
+    
+

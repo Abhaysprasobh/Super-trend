@@ -64,31 +64,9 @@ def test_get_indicator_comparison(token, symbol="AAPL", interval="1d", days=700)
     print_response(response)
 
 
-def test_save_settings(token):
-    print("Testing Save User Settings...")
-    response = requests.post(f"{BASE_URL}/settings", headers={
-        "x-access-token": str(token)
-    }, json={
-        "ticker": "AAPL",
-        "atr_len": 10,
-        "factor": 3.0,
-        "training_data_period": 100,
-        "highvol": 0.75,
-        "midvol": 0.5,
-        "lowvol": 0.25,
-        "high_multiplier": 2.0,
-        "mid_multiplier": 3.0,
-        "low_multiplier": 4.0,
-        "days": 700
-    })
-    print_response(response)
 
-def test_get_notifications(token):
-    print("Testing Get Notifications...")
-    response = requests.get(f"{BASE_URL}/notifications", headers={
-        "x-access-token": str(token)
-    })
-    print_response(response)
+
+
 def test_adaptive_supertrend(token):
     print("Testing Adaptive SuperTrend...")
     payload = {
@@ -109,6 +87,7 @@ def test_adaptive_supertrend(token):
         "x-access-token": str(token)
     }, json=payload)
     print_response(response)
+
 def test_basic_supertrend(ticker="AAPL", timerange="1mo", length=10, multiplier=3.0):
     print("Testing Basic SuperTrend...")
     response = requests.get(f"{BASE_URL}/supertrend", params={
@@ -130,9 +109,8 @@ if __name__ == "__main__":
         # test_get_stock_data(token, "AAPL")
         # test_get_stock_data(token, "GOOGL")
         # test_get_indicator_comparison(token, symbol="AAPL", interval="1d", days=700)
-        # test_save_settings(token)
-        # test_get_notifications(token)
-        # test_basic_supertrend("AAPL")
-        # test_adaptive_supertrend(token)
+
+        test_basic_supertrend("AAPL")
+        test_adaptive_supertrend(token)
     else:
         print("Login failed, skipping further tests.")
