@@ -17,8 +17,9 @@ import {
 export default function SupertrendPage() {
   const [formData, setFormData] = useState({
     ticker: "AAPL",
-    range: "1mo",
-    length: 10,
+    interval: "1d",
+    days: 700,
+    length: 7,
     multiplier: 3.0,
   });
 
@@ -30,7 +31,9 @@ export default function SupertrendPage() {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
-      [name]: isNaN(value) ? value : parseFloat(value),
+      [name]: ["days", "length", "multiplier"].includes(name)
+        ? parseFloat(value)
+        : value,
     }));
   };
 
@@ -69,7 +72,11 @@ export default function SupertrendPage() {
               {key}
             </label>
             <input
-              type="text"
+              type={
+                ["days", "length", "multiplier"].includes(key)
+                  ? "number"
+                  : "text"
+              }
               id={key}
               name={key}
               value={formData[key]}
@@ -91,6 +98,18 @@ export default function SupertrendPage() {
       {error && <p className="text-red-500 mt-4">{error}</p>}
 
       {/* Chart */}
+      {loading && !error && (
+        <div className="mt-10 text-blue-600 font-semibold">
+          Fetching chart data...
+        </div>
+      )}
+
+      {!loading && chartData.length === 0 && result && (
+        <p className="text-gray-500 mt-4">
+          No chart data available for this configuration.
+        </p>
+      )}
+
       {chartData.length > 0 && (
         <div className="mt-10 w-full max-w-6xl bg-white p-6 rounded-xl shadow">
           <h2 className="text-xl font-semibold mb-4">Supertrend Chart</h2>
@@ -101,10 +120,30 @@ export default function SupertrendPage() {
               <YAxis />
               <Tooltip />
               <Legend />
-              <Line type="monotone" dataKey="close" stroke="#3b82f6" name="Close Price" />
-              <Line type="monotone" dataKey="supertrend" stroke="#f97316" name="Supertrend" />
-              <Scatter data={buySignals} fill="#16a34a" name="Buy Signal" shape="triangle" />
-              <Scatter data={sellSignals} fill="#dc2626" name="Sell Signal" shape="cross" />
+              <Line
+                type="monotone"
+                dataKey="close"
+                stroke="#3b82f6"
+                name="Close Price"
+              />
+              <Line
+                type="monotone"
+                dataKey="supertrend"
+                stroke="#f97316"
+                name="Supertrend"
+              />
+              <Scatter
+                data={buySignals}
+                fill="#16a34a"
+                name="Buy Signal"
+                shape="triangle"
+              />
+              <Scatter
+                data={sellSignals}
+                fill="#dc2626"
+                name="Sell Signal"
+                shape="cross"
+              />
             </LineChart>
           </ResponsiveContainer>
         </div>

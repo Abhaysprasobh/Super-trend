@@ -4,6 +4,20 @@ import React, { useState } from "react";
 import { fetchIndicatorComparison } from "../_utils/GlobalApi";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
+import {
+  ResponsiveContainer,
+  ReferenceDot ,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  Scatter,
+  Legend,
+  LabelList,
+} from "recharts";
+
 
 const durationOptions = {
   "6 Months": 180,
@@ -40,7 +54,22 @@ const IndicatorComparison = () => {
 
       const result = await fetchIndicatorComparison(payload);
       console.log(result);
-      setData(result);
+
+      const convertToSignals = (rawData) => {
+        return rawData.map((entry) => ({
+          date: entry.date,
+          close: entry.close,
+          trend_value: entry.trend_value,
+          buy_signal: entry.buy_signal === 1 ? entry.close : null,
+          sell_signal: entry.sell_signal === 1 ? entry.close : null,
+        }));
+      };
+
+      setData({
+        ...result,
+        adaptive_chart: convertToSignals(result.adapt || []),
+        standard_chart: convertToSignals(result.super || []),
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load data.");
     } finally {
@@ -49,7 +78,7 @@ const IndicatorComparison = () => {
   };
 
   return (
-    <Card className="p-6 border rounded-xl shadow-xl bg-white max-w-3xl mx-auto">
+    <Card className="p-6 border rounded-xl shadow-xl bg-white max-w-6xl mx-auto">
       <CardHeader className="pb-4">
         <CardTitle className="text-xl font-semibold text-gray-900 flex items-center gap-2">
           📈 Adaptive vs Standard Strategy Comparison
@@ -88,72 +117,109 @@ const IndicatorComparison = () => {
         {loading && <p className="text-gray-500 mt-4 text-sm">Fetching data...</p>}
 
         {data && (
-  <div className="mt-6 space-y-6">
-    <div className="p-4 border rounded-lg bg-gray-50 shadow-sm">
-      <h3 className="text-lg font-medium text-gray-800">📊 Capital Comparison</h3>
-      <p className="text-sm text-gray-600 mt-2">
-        🧠 <strong>Better Strategy:</strong>{" "}
-        <span className="uppercase font-semibold text-blue-600">
-          {data.better_strategy}
-        </span>
-      </p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 text-sm text-gray-700">
-        <div>
-          <strong>Adaptive Final Capital:</strong>{" "}
-          ₹{data.adaptive?.final_capital?.toFixed(2) ?? "N/A"}
-        </div>
-        <div>
-          <strong>Standard Final Capital:</strong>{" "}
-          ₹{data.standard?.final_capital?.toFixed(2) ?? "N/A"}
-        </div>
-      </div>
-    </div>
+          <div className="mt-6 space-y-8">
 
-    {["adaptive", "standard"].map((type) => {
-      const strategy = data[type];
-      return (
-        <div
-          key={type}
-          className="p-4 border rounded-lg bg-gray-50 shadow-sm"
-        >
-          <h3 className="text-lg font-medium text-gray-800">
-            {type === "adaptive" ? "🤖 Adaptive Strategy" : "📐 Standard Strategy"}
-          </h3>
+            {/* Performance Table */}
+            <div className="p-4 border rounded-lg bg-gray-50 shadow-sm">
+              <h3 className="text-lg font-medium text-gray-800 mb-3">📐 Strategy Performance</h3>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm text-left text-gray-700 border">
+                  <thead className="bg-gray-100">
+                    <tr>
+                      <th className="p-3 border">Strategy</th>
+                      <th className="p-3 border">Final Capital</th>
+                      <th className="p-3 border">Total Trades</th>
+                      <th className="p-3 border">Profitable Trades</th>
+                      <th className="p-3 border">Total Return (%)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {["adaptive", "Supertrend"].map((key) => {
+                      const perf = data.performance[key];
+                      return (
+                        <tr key={key} className="border-t">
+                          <td className="p-3 border font-medium capitalize">{key}</td>
+                          <td className="p-3 border">₹{perf.final_capital?.toFixed(2)}</td>
+                          <td className="p-3 border">{perf.total_trades}</td>
+                          <td className="p-3 border">{perf.profitable_trades}</td>
+                          <td className="p-3 border">{perf.total_return?.toFixed(2)}%</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
-          <div className="mt-3">
-            <p className="font-semibold text-gray-700 mb-1">Buy Signals:</p>
-            <ul className="text-sm space-y-1 text-green-700">
-              {strategy?.buy_signals?.length > 0 ? (
-                strategy.buy_signals.map((sig, i) => (
-                  <li key={i}>
-                    🟢 {sig.date} — ₹{sig.price.toFixed(2)}
-                  </li>
-                ))
-              ) : (
-                <li>No buy signals</li>
-              )}
-            </ul>
-          </div>
+            {/* Chart Comparison */}
+            {["adaptive", "standard"].map((type) => {
+              const chartData = data[`${type}_chart`];
+              const title =
+                type === "adaptive" ? "🤖 Adaptive Strategy" : "📐 Standard Strategy";
 
-          <div className="mt-3">
-            <p className="font-semibold text-gray-700 mb-1">Sell Signals:</p>
-            <ul className="text-sm space-y-1 text-red-700">
-              {strategy?.sell_signals?.length > 0 ? (
-                strategy.sell_signals.map((sig, i) => (
-                  <li key={i}>
-                    🔴 {sig.date} — ₹{sig.price.toFixed(2)}
-                  </li>
-                ))
-              ) : (
-                <li>No sell signals</li>
-              )}
-            </ul>
-          </div>
-        </div>
-      );
-    })}
-  </div>
+              return (
+                <div key={type} className="p-4 border rounded-lg bg-gray-50 shadow-sm">
+                  <h3 className="text-lg font-medium text-gray-800 mb-4">{title}</h3>
+                  {chartData?.length > 0 ? (
+  <ResponsiveContainer width="100%" height={350}>
+    <LineChart data={chartData}>
+      <CartesianGrid strokeDasharray="3 3" />
+      <XAxis dataKey="date" />
+      <YAxis domain={["auto", "auto"]} />
+      <Tooltip />
+      <Legend />
+      <Line
+        type="monotone"
+        dataKey="close"
+        stroke="#0ea5e9"
+        strokeWidth={2}
+        name="Close Price"
+      />
+      <Line
+        type="monotone"
+        dataKey="trend_value"
+        stroke="#10b981"
+        strokeWidth={2}
+        name="Trend Line"
+      />
+
+      {/* Buy/Sell Signals as Reference Dots */}
+      {chartData.map((entry, index) => (
+  <React.Fragment key={`signal-${entry.date}-${index}`}>
+    {entry.buy_signal && (
+      <ReferenceDot
+        x={entry.date}
+        y={entry.trend_value}
+        r={8}
+        fill="#22c55e"
+        stroke="white"
+        label={{ value: "BUY", position: "top", fill: "#22c55e", fontSize: 12 }}
+      />
+    )}
+    {entry.sell_signal && (
+      <ReferenceDot
+        x={entry.date}
+        y={entry.trend_value}
+        r={8}
+        fill="#ef4444"
+        stroke="white"
+        label={{ value: "SELL", position: "bottom", fill: "#ef4444", fontSize: 12 }}
+      />
+    )}
+  </React.Fragment>
+))}
+
+    </LineChart>
+  </ResponsiveContainer>
+) : (
+  <p className="text-sm text-gray-500">No chart data available.</p>
 )}
+
+                </div>
+              );
+            })}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

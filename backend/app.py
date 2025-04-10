@@ -15,7 +15,7 @@ from adapt_test import get_supertrend_strategy_data
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
-# CORS(app, supports_credentials=True, origins=["http://localhost:3000"]) 
+CORS(app, supports_credentials=True, origins=["http://localhost:3000"]) 
 
 # MySQL configurations
 app.config['MYSQL_HOST'] = os.getenv('MYSQL_HOST')
@@ -263,15 +263,6 @@ def adaptive_supertrend():
         return jsonify(response), 200
     except Exception as e:
         return jsonify({'message': str(e)}), 500
-
-
-
-
-
-
-
-
-
 
 # login
 @app.route('/api/user', methods=['GET'])

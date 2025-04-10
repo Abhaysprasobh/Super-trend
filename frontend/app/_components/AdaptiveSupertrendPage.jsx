@@ -11,8 +11,6 @@ import {
   Legend,
   CartesianGrid,
   ResponsiveContainer,
-  Scatter,
-  ScatterChart,
   Label,
 } from "recharts";
 
@@ -48,7 +46,9 @@ export default function AdaptiveSupertrendPage() {
     setLoading(true);
     setError("");
     try {
-      const response = await fetchAdaptiveSupertrend(formData);
+      // const response = await fetchAdaptiveSupertrend(formData);
+      const raw = await fetchAdaptiveSupertrend(formData);
+      const response = typeof raw === "string" ? JSON.parse(raw) : raw;
       console.log("Response:", response);
       setResult(response);
     } catch (err) {
@@ -59,16 +59,7 @@ export default function AdaptiveSupertrendPage() {
     }
   };
 
-  // Format signals for scatter chart
-  const buySignals = result?.signals?.filter((s) => s.signal === "buy");
-  const sellSignals = result?.signals?.filter((s) => s.signal === "sell");
-
-  const chartData = result?.signals || [];
-
-  const equityCurve = result?.equity_curve?.map((value, index) => ({
-    index,
-    capital: value,
-  }));
+  const chartData = result?.data || [];
 
   return (
     <div className="min-h-screen bg-gray-100 p-6 flex flex-col items-center">
@@ -106,57 +97,20 @@ export default function AdaptiveSupertrendPage() {
       {/* Error */}
       {error && <p className="text-red-500 mt-4">{error}</p>}
 
-      {/* Stats */}
-      {result && (
-        <div className="mt-6 text-center bg-white p-4 rounded-lg shadow w-full max-w-2xl">
-          <p className="text-lg">
-            <strong>Final Capital:</strong> ₹{result.final_capital}
-          </p>
-          <p className="text-lg">
-            <strong>Annual Return:</strong> {(result.annual_return * 100).toFixed(2)}%
-          </p>
-        </div>
-      )}
-
-      {/* Price Chart with Buy/Sell */}
+      {/* Chart */}
       {chartData.length > 0 && (
         <div className="mt-10 w-full max-w-6xl bg-white p-6 rounded-xl shadow">
-          <h2 className="text-xl font-semibold mb-4">Signal Chart</h2>
+          <h2 className="text-xl font-semibold mb-4">Adaptive Supertrend Chart</h2>
           <ResponsiveContainer width="100%" height={400}>
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+              <XAxis dataKey="Date" tick={{ fontSize: 12 }} />
               <YAxis />
               <Tooltip />
               <Legend />
-              <Line type="monotone" dataKey="price" stroke="#0ea5e9" name="Price" />
-              <Scatter data={buySignals} fill="#22c55e" name="Buy" shape="triangle" />
-              <Scatter data={sellSignals} fill="#ef4444" name="Sell" shape="cross" />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      {/* Equity Curve */}
-      {equityCurve && (
-        <div className="mt-10 w-full max-w-6xl bg-white p-6 rounded-xl shadow">
-          <h2 className="text-xl font-semibold mb-4">Equity Curve</h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={equityCurve}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="index">
-                <Label value="Trade #" position="insideBottom" />
-              </XAxis>
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Line
-                type="monotone"
-                dataKey="capital"
-                stroke="#10b981"
-                strokeWidth={2}
-                name="Equity Value"
-              />
+              <Line type="monotone" dataKey="Close" stroke="#0ea5e9" name="Close Price" />
+              <Line type="monotone" dataKey="ADAPT_SUPERT" stroke="#f97316" name="Adaptive Supertrend" />
+              {/* <Line type="monotone" dataKey="up1" stroke="#10b981" name="Up1" /> */}
             </LineChart>
           </ResponsiveContainer>
         </div>
