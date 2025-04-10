@@ -42,6 +42,14 @@ function Header() {
                     </li>
 
                     <li>
+                    <a className="text-gray-500 transition hover:text-gray-500/75" href="../Adaptive"> Adaptive </a>
+                    </li>
+
+                    <li>
+                    <a className="text-gray-500 transition hover:text-gray-500/75" href="../Supertrend"> Supertrend </a>
+                    </li>
+
+                    <li>
                     <a className="text-gray-500 transition hover:text-gray-500/75" href="../Prediction"> Predictions & Insights </a>
                     </li>
 

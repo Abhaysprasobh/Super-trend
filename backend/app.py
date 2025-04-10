@@ -243,7 +243,7 @@ def supertrend_basic():
 
 @app.route('/api/adaptive', methods=['POST'])
 # @token_required
-def adaptive_supertrend(current_user):
+def adaptive_supertrend():
     data = request.get_json()
     try:
         response = get_adaptive_supertrend_json(data)
