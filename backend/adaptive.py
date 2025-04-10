@@ -457,7 +457,21 @@ def get_adaptive_supertrend_json(settings):
         # Compute a single signal field "up1"
         # upward signal: previous ADAPT_SUPERTd == 1 and current ADAPT_SUPERTd == -1 → up1 = 1
         # downward signal: previous ADAPT_SUPERTd == -1 and current ADAPT_SUPERTd == 1 → up1 = 0
-        result['up1'] = result['ADAPT_SUPERTd']
+        # Compute buy/sell signal field "up1"
+        result["up1"] = None
+        direction = result["ADAPT_SUPERTd"]
+        signals = []
+
+        for i in range(1, len(direction)):
+            if direction.iloc[i - 1] == -1 and direction.iloc[i] == 1:
+                signals.append(1)  # Buy signal
+            elif direction.iloc[i - 1] == 1 and direction.iloc[i] == -1:
+                signals.append(0)  # Sell signal
+            else:
+                signals.append(None)
+
+        signals.insert(0, None)  # Align list length with df
+        result["up1"] = signals
         result = result[result['ADAPT_SUPERT'].notna()]  
         result_reset = result.reset_index()
         result_reset['Date'] = result_reset['Date'].astype(str)
