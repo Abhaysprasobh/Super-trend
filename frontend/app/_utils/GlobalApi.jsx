@@ -57,13 +57,26 @@ export async function fetchStockData(ticker) {
   return await response.json();
 }
 
-export async function fetchIndicatorComparison(symbol, interval, days) {
+export async function fetchIndicatorComparison({
+  symbol,
+  high_vol_multiplier,
+  mid_vol_multiplier,
+  low_vol_multiplier,
+  days,
+}) {
   const response = await fetch(`${API_BASE_URL}/api/indicator`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ symbol, interval, days }),
+    body: JSON.stringify({
+      symbol,
+      high_vol_multiplier,
+      mid_vol_multiplier,
+      low_vol_multiplier,
+      days,
+    }),
+
   });
 
   if (!response.ok) {
