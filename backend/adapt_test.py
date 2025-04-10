@@ -5,6 +5,11 @@ import matplotlib.dates as mdates
 import yfinance as yf
 import datetime
 
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+
 
 def traditional_supertrend(df, atr_len=10, factor=3.0, high='High', low='Low', close='Close'):
     """
@@ -120,38 +125,60 @@ def historical_data(symbol, interval, days=700):
     return data
 
 
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
-
 # =============================================================================
-# Placeholder for custom K-Means clustering function.
-def custom_kmeans(data, initial_centroids):
-    """
-    A simple KMeans clustering function for demonstration.
-    
-    For each point, assign it to the nearest initial centroid.
-    Does not iterate to update centroids.
-    
+
+def custom_kmeans(data, initial_centroids, max_iter=100, tolerance=1e-6):
+    """    
     Parameters:
     -----------
-    data : np.array (n_samples, 1)
-        Data points to cluster.
-    initial_centroids : np.array
-        Initial centroid estimates.
+    data : numpy.ndarray
+        1D array of data points to cluster
+    initial_centroids : numpy.ndarray
+        Initial centroid values
+    max_iter : int
+        Maximum number of iterations
+    tolerance : float
+        Convergence threshold
         
     Returns:
     --------
-    centroids : np.array
-        Final centroids (unchanged in this demo).
-    labels : np.array
-        Cluster labels assigned to each data point.
+    centroids : numpy.ndarray
+        Final centroid values
+    clusters : numpy.ndarray
+        Cluster assignments for each data point
     """
-    centroids = initial_centroids.copy().flatten()
-    distances = np.abs(data - centroids.reshape(1, -1))
-    labels = np.argmin(distances, axis=1)
-    return centroids, labels
+    # Reshape data to 1D if needed
+    data_1d = data.flatten()
+    centroids = initial_centroids.copy()
+    
+    for iteration in range(max_iter):
+        # Calculate distances from each point to each centroid
+        distances = np.abs(data_1d.reshape(-1, 1) - centroids.reshape(1, -1))
+        
+        # Assign points to nearest centroid
+        clusters = np.argmin(distances, axis=1)
+        
+        # Calculate new centroids
+        new_centroids = np.array([data_1d[clusters == k].mean() if np.sum(clusters == k) > 0 
+                                  else centroids[k] for k in range(len(centroids))])
+        
+        # Check for convergence
+        if np.allclose(new_centroids, centroids, atol=tolerance):
+            break
+            
+        centroids = new_centroids
+    
+    # Sort centroids in descending order and remap clusters
+    centroid_indices = np.argsort(centroids)[::-1]  # Descending order
+    sorted_centroids = centroids[centroid_indices]
+    
+    # Remap cluster labels based on sorted centroids
+    remapped_clusters = np.zeros_like(clusters)
+    for new_idx, old_idx in enumerate(centroid_indices):
+        remapped_clusters[clusters == old_idx] = new_idx
+        
+    return sorted_centroids, remapped_clusters
+
 
 # =============================================================================
 def adaptive_supertrend(df, atr_len=10, factor=3.0, training_data_period=100, 
@@ -358,9 +385,10 @@ def calculate_supertrend_row(df, i, factor, atr_value, high='High', low='Low', c
 
 
 # =============================================================================
-def generate_signals(df, supertrend_col, direction_col):
+def generate_signals_reversed(df, supertrend_col, direction_col):
     """
     Generate buy and sell signals based on changes in the SuperTrend direction.
+    REVERSED: Buy when bearish trend starts, sell when bullish trend starts.
     
     Parameters:
     -----------
@@ -380,17 +408,41 @@ def generate_signals(df, supertrend_col, direction_col):
     signal_col = f"{supertrend_col}_signal"
     df[signal_col] = df[direction_col].diff()
     
-    # Buy signal: change from bearish to bullish (-2 diff)
-    df[f"{supertrend_col}_buy"] = np.where(df[signal_col] == -2, 1, 0)
-    # Sell signal: change from bullish to bearish (2 diff)
-    df[f"{supertrend_col}_sell"] = np.where(df[signal_col] == 2, 1, 0)
+    # Buy signal: change from bullish to bearish (2 diff)
+    df[f"{supertrend_col}_buy"] = np.where(df[signal_col] == 2, 1, 0)
+    # Sell signal: change from bearish to bullish (-2 diff)
+    df[f"{supertrend_col}_sell"] = np.where(df[signal_col] == -2, 1, 0)
     
     return df
 
 # =============================================================================
-def backtest_supertrend(df, supertrend_col, buy_col, sell_col, close='Close', initial_capital=100000):
+def backtest_supertrend(df, supertrend_col, buy_col, sell_col, close='Close', initial_capital=100000, transaction_cost_pct=0.1):
     """
-    Perform a simple backtest based on the SuperTrend buy and sell signals.
+    Perform a simple backtest based on the SuperTrend buy and sell signals with transaction costs.
+    
+    Parameters:
+    -----------
+    df : pandas.DataFrame
+        DataFrame with price and signal data.
+    supertrend_col : str
+        Base column name for the SuperTrend strategy (used for naming the portfolio column).
+    buy_col : str
+        Column name for buy signals.
+    sell_col : str
+        Column name for sell signals.
+    close : str
+        Column name for closing prices.
+    initial_capital : float
+        Initial capital for the backtest.
+    transaction_cost_pct : float
+        Transaction cost percentage (e.g., 0.1 for 0.1%).
+        
+    Returns:
+    --------
+    df : pandas.DataFrame
+        DataFrame with added portfolio value column.
+    metrics : dict
+        Dictionary with backtest metrics.
     """
     df = df.copy()
     portfolio_col = f'{supertrend_col}_portfolio'  # Unique column name per strategy
@@ -399,16 +451,30 @@ def backtest_supertrend(df, supertrend_col, buy_col, sell_col, close='Close', in
     in_position = False
     shares = 0
     cash = float(initial_capital)
+    entry_price = 0
+    total_trades = 0
+    winning_trades = 0
+    losing_trades = 0
     
     for i in range(len(df)):
         if df[buy_col].iloc[i] == 1 and not in_position:
             entry_price = df[close].iloc[i]
-            shares = cash / entry_price
+            transaction_cost = entry_price * shares * transaction_cost_pct / 100
+            shares = (cash - transaction_cost) / entry_price
             cash = 0.0
             in_position = True
+            total_trades += 1
         elif df[sell_col].iloc[i] == 1 and in_position:
             exit_price = df[close].iloc[i]
-            cash = shares * exit_price
+            transaction_cost = exit_price * shares * transaction_cost_pct / 100
+            cash = shares * exit_price - transaction_cost
+            
+            # Track trade performance
+            if exit_price > entry_price:
+                winning_trades += 1
+            elif exit_price < entry_price:
+                losing_trades += 1
+                
             shares = 0.0
             in_position = False
         
@@ -418,137 +484,408 @@ def backtest_supertrend(df, supertrend_col, buy_col, sell_col, close='Close', in
     # Calculate metrics
     initial_price = df[close].iloc[0]
     final_price = df[close].iloc[-1]
+    buy_hold_return = (final_price / initial_price - 1) * 100
     strategy_return = (df[portfolio_col].iloc[-1] / initial_capital - 1) * 100
+    win_rate = winning_trades / total_trades * 100 if total_trades > 0 else 0
     
     return df, {
         'final_capital': df[portfolio_col].iloc[-1],
-        'total_return': strategy_return
+        'total_return': strategy_return,
+        'buy_hold_return': buy_hold_return,
+        'total_trades': total_trades,
+        'win_rate': win_rate
     }
 
-# =============================================================================
-def plot_supertrend_with_signals(stock_name, df, traditional_factor=3.0):
+
+
+
+
+
+def generate_signals(df, supertrend_col, direction_col):
     """
-    Plot the comparison of Adaptive and Traditional SuperTrend signals.
+    Generate buy and sell signals based on changes in the SuperTrend direction.
+    This properly handles the signals for both traditional and adaptive SuperTrend.
     
     Parameters:
     -----------
-    stock_name : str
-        Stock ticker or name.
     df : pandas.DataFrame
-        DataFrame containing price and indicator data.
-    traditional_factor : float
-        The multiplier used in the traditional SuperTrend.
+        DataFrame with SuperTrend values.
+    supertrend_col : str
+        Column name for the SuperTrend value.
+    direction_col : str
+        Column name for the SuperTrend direction.
     
     Returns:
     --------
-    matplotlib.figure.Figure
-        The generated plot.
+    pandas.DataFrame
+        DataFrame with additional columns for signals.
     """
-    plot_df = df.dropna(subset=['ADAPT_SUPERT']).copy()
+    df = df.copy()
     
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 12),
-                                   gridspec_kw={'height_ratios': [3, 1]},
-                                   sharex=True)
+    # Add columns for signals (initialize with 0)
+    df[f"{supertrend_col}_buy"] = 0
+    df[f"{supertrend_col}_sell"] = 0
     
-    ax1.plot(plot_df.index, plot_df['Close'], label='Close Price', color='black', alpha=0.8)
-    # Assuming traditional_supertrend has created columns using this naming convention:
-    trad_prefix = f'ST_{traditional_factor}'
-    ax1.plot(plot_df.index, plot_df[f'{trad_prefix}_value'], label=f'Traditional ST {traditional_factor}x', color='blue', alpha=0.7)
-    ax1.plot(plot_df.index, plot_df['ADAPT_SUPERT'], label='Adaptive ST', color='red', alpha=0.7)
+    # The first row cannot generate signals
+    for i in range(1, len(df)):
+        prev_direction = df[direction_col].iloc[i-1]
+        curr_direction = df[direction_col].iloc[i]
+        
+        # Check if direction changed
+        if pd.notna(prev_direction) and pd.notna(curr_direction):
+            # Direction changed from bearish (1) to bullish (-1)
+            if prev_direction == 1 and curr_direction == -1:
+                df.iloc[i, df.columns.get_loc(f"{supertrend_col}_buy")] = 1
+            
+            # Direction changed from bullish (-1) to bearish (1)
+            elif prev_direction == -1 and curr_direction == 1:
+                df.iloc[i, df.columns.get_loc(f"{supertrend_col}_sell")] = 1
     
-    ax1.scatter(plot_df[plot_df[f'{trad_prefix}_buy'] == 1].index,
-                plot_df.loc[plot_df[f'{trad_prefix}_buy'] == 1, 'Close'] * 0.99,
-                marker='^', color='green', s=100, label='Traditional ST Buy')
-    ax1.scatter(plot_df[plot_df['ADAPT_SUPERT_buy'] == 1].index,
-                plot_df.loc[plot_df['ADAPT_SUPERT_buy'] == 1, 'Close'] * 0.98,
-                marker='^', color='darkgreen', s=120, label='Adaptive ST Buy')
-    
-    ax1.scatter(plot_df[plot_df[f'{trad_prefix}_sell'] == 1].index,
-                plot_df.loc[plot_df[f'{trad_prefix}_sell'] == 1, 'Close'] * 1.01,
-                marker='v', color='red', s=100, label='Traditional ST Sell')
-    ax1.scatter(plot_df[plot_df['ADAPT_SUPERT_sell'] == 1].index,
-                plot_df.loc[plot_df['ADAPT_SUPERT_sell'] == 1, 'Close'] * 1.02,
-                marker='v', color='darkred', s=120, label='Adaptive ST Sell')
-    
-    ax1.set_title(f"SuperTrend Comparison for {stock_name}", fontsize=16)
-    ax1.set_ylabel("Price", fontsize=12)
-    ax1.grid(True, alpha=0.3)
-    ax1.legend(loc='upper left')
-    
-    ax2.plot(plot_df.index, plot_df[f'{trad_prefix}_portfolio'], label='Traditional ST Portfolio', color='blue')
-    ax2.plot(plot_df.index, plot_df['ADAPT_SUPERT_portfolio'], label='Adaptive ST Portfolio', color='red')
-    ax2.set_title("Portfolio Performance", fontsize=14)
-    ax2.set_ylabel("Portfolio Value", fontsize=12)
-    ax2.grid(True, alpha=0.3)
-    ax2.legend(loc='upper left')
-    
-    ax2.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-    plt.setp(ax2.get_xticklabels(), rotation=45, ha='right')
-    plt.tight_layout()
-    
-    return fig
+    return df
 
-import json
 
-def supertrend_strategy_comparison_json(ticker, days=700, 
+
+
+
+def supertrend_strategy_comparison(ticker, days=700, 
                                         high_vol_multiplier=3, 
                                         mid_vol_multiplier=2, 
-                                        low_vol_multiplier=1):
+                                        low_vol_multiplier=1,
+                                        transaction_cost_pct=0.1,
+                                        reversed_signals=False):
+    """
+    Compare Traditional and Adaptive SuperTrend strategies with correctly generated signals.
+    
+    Parameters:
+    -----------
+    ticker : str
+        Stock ticker symbol.
+    days : int
+        Number of historical days to analyze.
+    high_vol_multiplier : float
+        Multiplier for high volatility periods.
+    mid_vol_multiplier : float
+        Multiplier for medium volatility periods.
+    low_vol_multiplier : float
+        Multiplier for low volatility periods.
+    transaction_cost_pct : float
+        Transaction cost percentage.
+    reversed_signals : bool
+        If True, buy on bearish trend start and sell on bullish trend start.
+        If False, buy on bullish trend start and sell on bearish trend start (standard).
+        
+    Returns:
+    --------
+    fig : matplotlib Figure
+        Plot comparing the two strategies
+    df : pandas DataFrame
+        Data used for the plot
+    """
+    # Get historical data
     df = historical_data(ticker, '1d', days)
     
     # Traditional SuperTrend
     df = traditional_supertrend(df, factor=high_vol_multiplier)
     trad_prefix = f'ST_{high_vol_multiplier}'
     df = generate_signals(df, trad_prefix, f'{trad_prefix}_d')
-    df, trad_metrics = backtest_supertrend(df, trad_prefix, f'{trad_prefix}_buy', f'{trad_prefix}_sell')
     
     # Adaptive SuperTrend
     df = adaptive_supertrend(df,
-                             high_vol_multiplier=high_vol_multiplier,
-                             mid_vol_multiplier=mid_vol_multiplier,
-                             low_vol_multiplier=low_vol_multiplier)
+                           high_vol_multiplier=high_vol_multiplier,
+                           mid_vol_multiplier=mid_vol_multiplier,
+                           low_vol_multiplier=low_vol_multiplier)
     df = generate_signals(df, 'ADAPT_SUPERT', 'ADAPT_SUPERTd')
-    df, adapt_metrics = backtest_supertrend(df, 'ADAPT_SUPERT', 'ADAPT_SUPERT_buy', 'ADAPT_SUPERT_sell')
     
-    # Prepare signals
-    trad_signals = df[['Close', f'{trad_prefix}_buy', f'{trad_prefix}_sell']].copy()
-    trad_signals.columns = ['close', 'buy', 'sell']
-    trad_signals['date'] = df.index.astype(str)
+    # Reverse signals if requested (opposite of standard trend-following)
+    if reversed_signals:
+        # Swap buy and sell signals
+        for prefix in [trad_prefix, 'ADAPT_SUPERT']:
+            buy_col = f"{prefix}_buy"
+            sell_col = f"{prefix}_sell"
+            temp = df[buy_col].copy()
+            df[buy_col] = df[sell_col]
+            df[sell_col] = temp
     
-    adapt_signals = df[['Close', 'ADAPT_SUPERT_buy', 'ADAPT_SUPERT_sell']].copy()
-    adapt_signals.columns = ['close', 'buy', 'sell']
-    adapt_signals['date'] = df.index.astype(str)
+    # Run backtest for both strategies
+    df, trad_metrics = backtest_supertrend(df, trad_prefix, 
+                                                  f'{trad_prefix}_buy', 
+                                                  f'{trad_prefix}_sell',
+                                                  transaction_cost_pct=transaction_cost_pct)
     
-    # JSON-friendly conversion
-    trad_list = trad_signals.to_dict(orient='records')
-    adapt_list = adapt_signals.to_dict(orient='records')
+    df, adapt_metrics = backtest_supertrend(df, 'ADAPT_SUPERT', 
+                                                   'ADAPT_SUPERT_buy', 
+                                                   'ADAPT_SUPERT_sell',
+                                                   transaction_cost_pct=transaction_cost_pct)
     
-    better = "Adaptive SuperTrend" if adapt_metrics['final_capital'] > trad_metrics['final_capital'] else "Traditional SuperTrend"
+    # Create plot to visualize results
+    plot_df = df.dropna(subset=['ADAPT_SUPERT']).copy()
     
-    result = {
-        "perf": {
-            "super": round(trad_metrics['final_capital'], 2),
-            "adapt": round(adapt_metrics['final_capital'], 2), 
-            "best": better
-        },
-        "super": trad_list,
-        "adapt": adapt_list
-    }
-
-    return  json.dumps(result)
-
-
-
-import json
-
-if __name__ == '__main__':
-    output = supertrend_strategy_comparison_json(
-        ticker='RELIANCE.NS',
-        days=700,
-        high_vol_multiplier=3,
-        mid_vol_multiplier=2,
-        low_vol_multiplier=1
+    fig = plt.figure(figsize=(16, 20))
+    
+    # Define GridSpec for layout
+    gs = plt.GridSpec(5, 4, figure=fig)
+    
+    # Main price chart with SuperTrend lines
+    ax1 = fig.add_subplot(gs[0:2, :])
+    ax1.plot(plot_df.index, plot_df['Close'], label='Close Price', color='black', alpha=0.8)
+    ax1.plot(plot_df.index, plot_df[f'{trad_prefix}_value'], label=f'Traditional ST {high_vol_multiplier}x', 
+             color='blue', alpha=0.7)
+    ax1.plot(plot_df.index, plot_df['ADAPT_SUPERT'], label='Adaptive ST', color='red', alpha=0.7)
+    
+    # Buy signals
+    buy_trad = plot_df[plot_df[f'{trad_prefix}_buy'] == 1]
+    buy_adapt = plot_df[plot_df['ADAPT_SUPERT_buy'] == 1]
+    
+    if not buy_trad.empty:
+        ax1.scatter(buy_trad.index, buy_trad['Close'] * 0.99,
+                   marker='^', color='green', s=100, label='Traditional ST Buy')
+    
+    if not buy_adapt.empty:
+        ax1.scatter(buy_adapt.index, buy_adapt['Close'] * 0.98,
+                   marker='^', color='darkgreen', s=120, label='Adaptive ST Buy')
+    
+    # Sell signals
+    sell_trad = plot_df[plot_df[f'{trad_prefix}_sell'] == 1]
+    sell_adapt = plot_df[plot_df['ADAPT_SUPERT_sell'] == 1]
+    
+    if not sell_trad.empty:
+        ax1.scatter(sell_trad.index, sell_trad['Close'] * 1.01,
+                   marker='v', color='red', s=100, label='Traditional ST Sell')
+    
+    if not sell_adapt.empty:
+        ax1.scatter(sell_adapt.index, sell_adapt['Close'] * 1.02,
+                   marker='v', color='darkred', s=120, label='Adaptive ST Sell')
+    
+    signal_mode = "Reversed (Buy on Bearish, Sell on Bullish)" if reversed_signals else "Standard (Buy on Bullish, Sell on Bearish)"
+    ax1.set_title(f"SuperTrend Comparison for {ticker} - {signal_mode}", fontsize=16)
+    ax1.set_ylabel("Price", fontsize=12)
+    ax1.grid(True, alpha=0.3)
+    ax1.legend(loc='upper left')
+    
+    # Portfolio performance
+    ax2 = fig.add_subplot(gs[2, :])
+    ax2.plot(plot_df.index, plot_df[f'{trad_prefix}_portfolio'], label='Traditional ST Portfolio', color='blue')
+    ax2.plot(plot_df.index, plot_df['ADAPT_SUPERT_portfolio'], label='Adaptive ST Portfolio', color='red')
+    
+    # Add buy-hold portfolio for comparison
+    if 'buy_hold' not in plot_df.columns:
+        initial_capital = 100000
+        plot_df['buy_hold'] = initial_capital * (plot_df['Close'] / plot_df['Close'].iloc[0])
+    ax2.plot(plot_df.index, plot_df['buy_hold'], label='Buy & Hold', color='purple', linestyle='--')
+    
+    ax2.set_title("Portfolio Performance", fontsize=14)
+    ax2.set_ylabel("Portfolio Value ($)", fontsize=12)
+    ax2.grid(True, alpha=0.3)
+    ax2.legend(loc='upper left')
+    
+    # Volatility clusters
+    ax3 = fig.add_subplot(gs[3, :])
+    colors = {0: 'red', 1: 'orange', 2: 'green'}
+    cluster_labels = {0: 'High Volatility', 1: 'Medium Volatility', 2: 'Low Volatility'}
+    
+    # Plot the volatility line
+    ax3.plot(plot_df.index, plot_df['volatility'], color='gray', alpha=0.4, label='ATR Volatility')
+    
+    # Plot the centroids as horizontal lines
+    valid_centroids = plot_df[['high_vol_centroid', 'mid_vol_centroid', 'low_vol_centroid']].iloc[-1]
+    for i, (centroid_name, centroid_value) in enumerate(valid_centroids.items()):
+        if pd.notna(centroid_value):
+            ax3.axhline(y=centroid_value, color=colors[i], linestyle='--', alpha=0.7,
+                       label=f"{cluster_labels[i]} Centroid: {centroid_value:.5f}")
+    
+    # Color the points by cluster
+    for cluster in [0, 1, 2]:
+        cluster_df = plot_df[plot_df['cluster'] == cluster].dropna(subset=['volatility'])
+        if not cluster_df.empty:
+            ax3.scatter(cluster_df.index, cluster_df['volatility'], 
+                       color=colors.get(cluster, 'gray'), alpha=0.7, 
+                       label=f'Cluster {cluster}: {cluster_labels[cluster]}')
+    
+    ax3.set_title("Volatility Clusters", fontsize=14)
+    ax3.set_ylabel("ATR Volatility", fontsize=12)
+    ax3.grid(True, alpha=0.3)
+    ax3.legend(loc='upper left')
+    
+    # Direction and Multiplier chart
+    ax4 = fig.add_subplot(gs[4, :])
+    
+    # Plot direction
+    ax4.plot(plot_df.index, plot_df[f'{trad_prefix}_d'], 
+             label='Traditional Direction', color='blue', drawstyle='steps-post', alpha=0.7)
+    ax4.plot(plot_df.index, plot_df['ADAPT_SUPERTd'], 
+             label='Adaptive Direction', color='red', drawstyle='steps-post', alpha=0.7)
+    
+    # Set y-axis limits to show direction clearly
+    ax4.set_ylim(-1.5, 1.5)
+    
+    # Add reference line at y=0
+    ax4.axhline(y=0, color='black', linestyle='-', alpha=0.2)
+    
+    ax4.set_title("SuperTrend Direction (-1: Bullish, 1: Bearish)", fontsize=14)
+    ax4.set_ylabel("Direction", fontsize=12)
+    ax4.set_yticks([-1, 1])
+    ax4.set_yticklabels(['Bullish (-1)', 'Bearish (1)'])
+    ax4.grid(True, alpha=0.3)
+    ax4.legend(loc='upper left')
+    
+    # Format x-axis dates
+    for ax in [ax1, ax2, ax3, ax4]:
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+        plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
+    
+    # Add text box with performance metrics
+    perf_text = (
+        f"Traditional SuperTrend ({high_vol_multiplier}x):\n"
+        f"  Final Capital: ${trad_metrics['final_capital']:.2f}\n"
+        f"  Total Return: {trad_metrics['total_return']:.2f}%\n"
+        f"  Win Rate: {trad_metrics['win_rate']:.2f}%\n"
+        f"  Total Trades: {trad_metrics['total_trades']}\n\n"
+        f"Adaptive SuperTrend:\n"
+        f"  Final Capital: ${adapt_metrics['final_capital']:.2f}\n"
+        f"  Total Return: {adapt_metrics['total_return']:.2f}%\n"
+        f"  Win Rate: {adapt_metrics['win_rate']:.2f}%\n"
+        f"  Total Trades: {adapt_metrics['total_trades']}\n\n"
+        f"Buy & Hold Return: {trad_metrics['buy_hold_return']:.2f}%\n"
+        f"Transaction Cost: {transaction_cost_pct}%\n"
+        f"Signal Mode: {signal_mode}\n"
+        f"Volatility Multipliers: {high_vol_multiplier}x (high), {mid_vol_multiplier}x (mid), {low_vol_multiplier}x (low)"
     )
+    
+    fig.text(0.05, 0.01, perf_text, fontsize=10, 
+             bbox=dict(facecolor='white', alpha=0.8, boxstyle='round,pad=0.5'))
+    
+    plt.tight_layout()
+    plt.subplots_adjust(bottom=0.15)  # Make room for text box
+    
+    print(f"Traditional SuperTrend Signals: {buy_trad.shape[0]} buy, {sell_trad.shape[0]} sell")
+    print(f"Adaptive SuperTrend Signals: {buy_adapt.shape[0]} buy, {sell_adapt.shape[0]} sell")
+    plt.show()
+    return fig, df
 
-    # If needed, convert to actual JSON string
-    print(output)
+
+
+def get_supertrend_strategy_data(ticker, days=700, 
+                                 high_vol_multiplier=3, 
+                                 mid_vol_multiplier=2, 
+                                 low_vol_multiplier=1,
+                                 transaction_cost_pct=0.1,
+                                 reversed_signals=False):
+    """
+    Generate JSON data with performance metrics and trade points for both Adaptive
+    and Traditional SuperTrend strategies.
+    """
+    try:
+        df = historical_data(ticker, '1d', days)
+
+        df = traditional_supertrend(df, factor=high_vol_multiplier)
+        trad_prefix = f'ST_{high_vol_multiplier}'
+        df = generate_signals(df, trad_prefix, f'{trad_prefix}_d')
+
+        df = adaptive_supertrend(df,
+                                 high_vol_multiplier=high_vol_multiplier,
+                                 mid_vol_multiplier=mid_vol_multiplier,
+                                 low_vol_multiplier=low_vol_multiplier)
+        df = generate_signals(df, 'ADAPT_SUPERT', 'ADAPT_SUPERTd')
+
+        if reversed_signals:
+            for prefix in [trad_prefix, 'ADAPT_SUPERT']:
+                buy_col = f"{prefix}_buy"
+                sell_col = f"{prefix}_sell"
+                df[buy_col], df[sell_col] = df[sell_col].copy(), df[buy_col].copy()
+
+        df, trad_metrics = backtest_supertrend(df, trad_prefix, 
+                                               f'{trad_prefix}_buy', 
+                                               f'{trad_prefix}_sell',
+                                               transaction_cost_pct=transaction_cost_pct)
+        df, adapt_metrics = backtest_supertrend(df, 'ADAPT_SUPERT', 
+                                                'ADAPT_SUPERT_buy', 
+                                                'ADAPT_SUPERT_sell',
+                                                transaction_cost_pct=transaction_cost_pct)
+
+        initial_close = df['Close'].iloc[0]
+        final_close = df['Close'].iloc[-1]
+        buy_hold_return = ((final_close / initial_close) - 1) * 100
+
+        result = {
+            'ticker': ticker,
+            'performance': {
+                'Supertrend': {
+                    'final_capital': float(trad_metrics['final_capital']),
+                    'total_return': float(trad_metrics['total_return']),
+                    'total_trades': int(trad_metrics['total_trades']),
+                    'profitable_trades': int(trad_metrics['win_rate'] * trad_metrics['total_trades'] / 100)
+                },
+                'adaptive': {
+                    'final_capital': float(adapt_metrics['final_capital']),
+                    'total_return': float(adapt_metrics['total_return']),
+                    'total_trades': int(adapt_metrics['total_trades']),
+                    'profitable_trades': int(adapt_metrics['win_rate'] * adapt_metrics['total_trades'] / 100)
+                },
+                'buy_hold_return': float(buy_hold_return)
+            },
+            'adapt': [],
+            'super': [],
+            'params': {
+                'days': days,
+                'high_vol_multiplier': high_vol_multiplier,
+                'mid_vol_multiplier': mid_vol_multiplier,
+                'low_vol_multiplier': low_vol_multiplier,
+                'transaction_cost_pct': transaction_cost_pct,
+                'reversed_signals': reversed_signals
+            }
+        }
+
+        for idx, row in df.iterrows():
+            date_str = idx.strftime('%Y-%m-%d')
+            if pd.notna(row['ADAPT_SUPERT']):
+                result['adapt'].append({
+                    'date': date_str,
+                    'close': float(row['Close']),
+                    'trend_value': float(row['ADAPT_SUPERT']),
+                    'direction': int(row['ADAPT_SUPERTd']),
+                    'buy_signal': int(row['ADAPT_SUPERT_buy']),
+                    'sell_signal': int(row['ADAPT_SUPERT_sell']),
+                    'portfolio_value': float(row['ADAPT_SUPERT_portfolio'])
+                })
+            if pd.notna(row[f'{trad_prefix}_value']):
+                result['super'].append({
+                    'date': date_str,
+                    'close': float(row['Close']),
+                    'trend_value': float(row[f'{trad_prefix}_value']),
+                    'direction': int(row[f'{trad_prefix}_d']),
+                    'buy_signal': int(row[f'{trad_prefix}_buy']),
+                    'sell_signal': int(row[f'{trad_prefix}_sell']),
+                    'portfolio_value': float(row[f'{trad_prefix}_portfolio'])
+                })
+
+        result['summary'] = {
+            'start_date': result['adapt'][0]['date'] if result['adapt'] else None,
+            'end_date': result['adapt'][-1]['date'] if result['adapt'] else None,
+            'days_analyzed': len(result['adapt']),
+            'total_supertrend_signals': sum(item['buy_signal'] + item['sell_signal'] for item in result['super']),
+            'total_adaptive_signals': sum(item['buy_signal'] + item['sell_signal'] for item in result['adapt']),
+        }
+        print(f"Adaptive signals: {sum(d['buy_signal'] for d in result['adapt'])} buys, {sum(d['sell_signal'] for d in result['adapt'])} sells")
+        print(f"Supertrend signals: {sum(d['buy_signal'] for d in result['super'])} buys, {sum(d['sell_signal'] for d in result['super'])} sells")
+
+        return result
+
+    except Exception as e:
+        return {
+            'error': str(e),
+            'status': 'error',
+            'ticker': ticker,
+            'message': f"Failed to process SuperTrend strategies for {ticker}"
+        }
+
+# -----------------------------------------------------------------------------
+if __name__ == '__main__':
+    # Display comparison plot
+    # fig, df = supertrend_strategy_comparison("RELIANCE.NS")
+    # Generate JSON-like strategy data
+    data = get_supertrend_strategy_data("RELIANCE.NS", days=700, 
+                                        high_vol_multiplier=3.0, 
+                                        mid_vol_multiplier=2.0, 
+                                        low_vol_multiplier=1.0,
+                                        reversed_signals=True)
+    # print(data)

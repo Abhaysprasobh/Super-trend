@@ -11,11 +11,11 @@ from flask_cors import CORS
 load_dotenv()
 from supertrend import get_supertrend_data
 from adaptive import get_adaptive_supertrend_json
-from adapt_test import supertrend_strategy_comparison_json
+from adapt_test import get_supertrend_strategy_data
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
-CORS(app, supports_credentials=True, origins=["http://localhost:3000"]) 
+# CORS(app, supports_credentials=True, origins=["http://localhost:3000"]) 
 
 # MySQL configurations
 app.config['MYSQL_HOST'] = os.getenv('MYSQL_HOST')
@@ -207,27 +207,38 @@ def get_indicator_comparison():
     signals, equity curves, and annual returns for a given symbol.
     """
     data = request.get_json()
-    symbol = data.get('symbol')
+    symbol = data.get('symbol', "AAPL")
     high_vol = data.get('high_vol_multiplier', 3)
     mid_vol = data.get('mid_vol_multiplier', 2)
     low_vol = data.get('low_vol_multiplier', 1)
-    days = data.get('days', 700)
+    days = data.get('days', 700) # maximum days to fetch data
+
+    # not req
+    transaction_cost = data.get('transaction_cost_pct', 0.1)
+    reversed_signals = data.get('reversed_signals', False)
     
     if not symbol:
         return jsonify({'message': 'Symbol is required'}), 400
     
     try:
-        result = supertrend_strategy_comparison_json(
+        result = get_supertrend_strategy_data(
             ticker=symbol,
             days=days,
             high_vol_multiplier=high_vol,
             mid_vol_multiplier=mid_vol,
-            low_vol_multiplier=low_vol
+            low_vol_multiplier=low_vol,
+
+
+            transaction_cost_pct=transaction_cost,
+            reversed_signals=reversed_signals
         )
         return jsonify(result), 200
     except Exception as e:
         return jsonify({'message': str(e)}), 500
     
+
+
+# supertrend
 @app.route('/api/supertrend', methods=['GET'])
 def supertrend_basic():
     ticker = request.args.get('ticker')
@@ -242,6 +253,7 @@ def supertrend_basic():
     except Exception as e:
         return jsonify({'message': str(e)}), 500
 
+# adaptive
 @app.route('/api/adaptive', methods=['POST'])
 # @token_required
 def adaptive_supertrend():
@@ -261,7 +273,7 @@ def adaptive_supertrend():
 
 
 
-
+# login
 @app.route('/api/user', methods=['GET'])
 @token_required
 def get_user(current_user):
