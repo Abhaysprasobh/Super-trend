@@ -458,15 +458,18 @@ def get_adaptive_supertrend_json(settings):
         # upward signal: previous ADAPT_SUPERTd == 1 and current ADAPT_SUPERTd == -1 → up1 = 1
         # downward signal: previous ADAPT_SUPERTd == -1 and current ADAPT_SUPERTd == 1 → up1 = 0
         result['up1'] = result['ADAPT_SUPERTd']
-        
+        result = result[result['ADAPT_SUPERT'].notna()]  
         result_reset = result.reset_index()
-        output_df = result_reset[['Date', 'ADAPT_SUPERT', 'Close', 'up1']]
+        result_reset['Date'] = result_reset['Date'].astype(str)
+        output_df = result_reset[['Date', 'ADAPT_SUPERT', 'Close', 'up1']].replace({np.nan: None})
         data_records = output_df.to_dict(orient='records')
+
         response = {
             "success": True,
             "error": None,
             "data": data_records
         }
+        print(json.dumps(response)[0:200])
         return json.dumps(response, default=str)
     
     except Exception as e:
