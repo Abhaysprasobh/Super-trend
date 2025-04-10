@@ -88,11 +88,14 @@ def test_adaptive_supertrend(token):
     }, json=payload)
     print_response(response)
 
-def test_basic_supertrend(ticker="AAPL", timerange="1mo", length=10, multiplier=3.0):
+
+
+def test_basic_supertrend(ticker="AAPL", interval="1d", days=700, length=7, multiplier=3.0):
     print("Testing Basic SuperTrend...")
     response = requests.get(f"{BASE_URL}/supertrend", params={
         "ticker": ticker,
-        "range": timerange,
+        "interval": interval,
+        "days": days,
         "length": length,
         "multiplier": multiplier
     })
@@ -110,7 +113,7 @@ if __name__ == "__main__":
         # test_get_stock_data(token, "GOOGL")
         # test_get_indicator_comparison(token, symbol="AAPL", interval="1d", days=700)
 
-        test_basic_supertrend("AAPL")
+        # test_basic_supertrend("AAPL")
         test_adaptive_supertrend(token)
     else:
         print("Login failed, skipping further tests.")

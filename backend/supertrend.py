@@ -153,7 +153,7 @@ def plot_standard_supertrend(stock_name, df, length=7, multiplier=3.0, fill_alph
 
 
 
-def get_supertrend_data(ticker: str, timerange: str, length: int = 7, multiplier: float = 3.0):
+def get_supertrend_data(ticker: str, interval: str = "1d", days: int = 700, length: int = 7, multiplier: float = 3.0):
     """
     Get SuperTrend data for a given ticker and return as JSON.
     
@@ -161,8 +161,8 @@ def get_supertrend_data(ticker: str, timerange: str, length: int = 7, multiplier
     -----------
     ticker : str
         Stock ticker symbol
-    timerange : str
-        Time range for historical data (e.g., '1d', '1wk', '1mo')
+    interval : str
+        interval of stock
     length : int
         SuperTrend length parameter
     multiplier : float
@@ -173,10 +173,11 @@ def get_supertrend_data(ticker: str, timerange: str, length: int = 7, multiplier
     dict
         JSON-compatible dictionary with SuperTrend data
     """
+
     try:
         # Get historical data (assuming historical_data function exists)
         from analysis import historical_data
-        df = historical_data(ticker, timerange, 700)
+        df = historical_data(ticker, interval, days)
         
         # Calculate SuperTrend
         result = supertrend(df, length=length, multiplier=multiplier)
@@ -226,5 +227,5 @@ if __name__ == '__main__':
 
     print(result)
     # Test the function
-    result = get_supertrend_data('AAPL', '1d')
+    result = get_supertrend_data('AAPL', interval="1d", days=700, length=7, multiplier=3.0)
     print(json.dumps(result, indent=2))

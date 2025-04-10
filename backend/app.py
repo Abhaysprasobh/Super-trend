@@ -231,12 +231,13 @@ def get_indicator_comparison():
 @app.route('/api/supertrend', methods=['GET'])
 def supertrend_basic():
     ticker = request.args.get('ticker')
-    timerange = request.args.get('range', '1mo')
+    interval = request.args.get('interval', '1d')
+    days = int(request.args.get('days', 700))
     length = int(request.args.get('length', 7))
     multiplier = float(request.args.get('multiplier', 3.0))
 
     try:
-        response = get_supertrend_data(ticker, timerange, length, multiplier)
+        response = get_supertrend_data(ticker, interval=interval, days=days, length=length, multiplier=multiplier)
         return jsonify(response), 200
     except Exception as e:
         return jsonify({'message': str(e)}), 500
