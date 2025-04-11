@@ -5,11 +5,6 @@ import matplotlib.dates as mdates
 import yfinance as yf
 import datetime
 
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
-
 
 def traditional_supertrend(df, atr_len=10, factor=3.0, high='High', low='Low', close='Close'):
     """
@@ -39,6 +34,7 @@ def traditional_supertrend(df, atr_len=10, factor=3.0, high='High', low='Low', c
     tr3 = abs(df[low] - df[close].shift())
     tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
     atr = tr.rolling(window=atr_len).mean()
+    df['atr'] = atr  # Store ATR for reference
     
     # Calculate bands
     hl2 = (df[high] + df[low]) / 2
@@ -50,12 +46,20 @@ def traditional_supertrend(df, atr_len=10, factor=3.0, high='High', low='Low', c
     df[f'{col_prefix}_value'] = np.nan
     df[f'{col_prefix}_d'] = np.nan
     
-    # First row
-    df.loc[df.index[0], f'{col_prefix}_d'] = -1  # Start as bullish (Pine convention)
-    df.loc[df.index[0], f'{col_prefix}_value'] = lower_band.iloc[0]
+    # Find first valid ATR index to avoid NaN contamination
+    first_valid_idx = atr.first_valid_index()
+    if first_valid_idx is None:
+        raise ValueError("Not enough data to calculate ATR")
+    
+    # Get integer location of first valid index
+    start_idx = df.index.get_loc(first_valid_idx)
+    
+    # Initialize at first valid index
+    df.loc[df.index[start_idx], f'{col_prefix}_d'] = -1  # Start as bullish (Pine convention)
+    df.loc[df.index[start_idx], f'{col_prefix}_value'] = lower_band.iloc[start_idx]
     
     # Calculate SuperTrend values
-    for i in range(1, len(df)):
+    for i in range(start_idx + 1, len(df)):
         # Get previous values
         prev_value = df[f'{col_prefix}_value'].iloc[i-1]
         prev_dir = df[f'{col_prefix}_d'].iloc[i-1]
@@ -125,8 +129,6 @@ def historical_data(symbol, interval, days=700):
     return data
 
 
-# =============================================================================
-
 def custom_kmeans(data, initial_centroids, max_iter=100, tolerance=1e-6):
     """    
     Parameters:
@@ -180,135 +182,6 @@ def custom_kmeans(data, initial_centroids, max_iter=100, tolerance=1e-6):
     return sorted_centroids, remapped_clusters
 
 
-# =============================================================================
-def adaptive_supertrend(df, atr_len=10, factor=3.0, training_data_period=100, 
-                        highvol=0.75, midvol=0.5, lowvol=0.25,
-                        high_vol_multiplier=2.0, mid_vol_multiplier=3.0, low_vol_multiplier=4.0,
-                        high='High', low='Low', close='Close'):
-    """
-    Machine Learning Adaptive SuperTrend Indicator 
-    
-    Parameters:
-    -----------
-    df : pandas.DataFrame
-        DataFrame with OHLC data
-    atr_len : int
-        ATR length for volatility calculation
-    factor : float
-        SuperTrend factor (fallback if cluster-specific multipliers not used)
-    training_data_period : int
-        Length of training data for custom k-means clustering
-    highvol : float
-        Initial high volatility percentile guess (0-1)
-    midvol : float
-        Initial medium volatility percentile guess (0-1)
-    lowvol : float
-        Initial low volatility percentile guess (0-1)
-    high_vol_multiplier : float
-        Multiplier for high volatility clusters
-    mid_vol_multiplier : float
-        Multiplier for medium volatility clusters
-    low_vol_multiplier : float
-        Multiplier for low volatility clusters
-    high, low, close : str
-        Column names for High, Low, Close prices
-    
-    Returns:
-    --------
-    pandas.DataFrame
-        Original dataframe with additional columns for SuperTrend values
-    """
-    df = df.copy()
-    
-    # Calculate ATR (Average True Range)
-    tr1 = df[high] - df[low]
-    tr2 = abs(df[high] - df[close].shift())
-    tr3 = abs(df[low] - df[close].shift())
-    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-    volatility = tr.rolling(window=atr_len).mean()  # ATR
-    
-    # Initialize columns
-    df['volatility'] = volatility
-    df['cluster'] = np.nan
-    df['assigned_centroid'] = np.nan
-    df['high_vol_centroid'] = np.nan
-    df['mid_vol_centroid'] = np.nan
-    df['low_vol_centroid'] = np.nan
-    df['high_vol_size'] = np.nan
-    df['mid_vol_size'] = np.nan
-    df['low_vol_size'] = np.nan
-    
-    # Initialize SuperTrend columns (Pine Script convention)
-    df['ADAPT_SUPERT'] = np.nan    # Trend value
-    df['ADAPT_SUPERTd'] = np.nan   # Direction (-1 for bullish, 1 for bearish in Pine)
-    df['ADAPT_SUPERTl'] = np.nan   # Long band
-    df['ADAPT_SUPERTs'] = np.nan   # Short band
-    df['upper_band'] = np.nan      # Upper band
-    df['lower_band'] = np.nan      # Lower band
-    
-    # Process data only after we have enough history
-    for i in range(training_data_period, len(df)):
-        # Get training window
-        window = df['volatility'].iloc[i-training_data_period:i].dropna().values.reshape(-1, 1)
-        
-        if len(window) < training_data_period:
-            continue
-            
-        # Initial centroid estimates based on percentiles
-        upper = np.max(window)
-        lower = np.min(window)
-        
-        high_volatility = lower + (upper - lower) * highvol
-        medium_volatility = lower + (upper - lower) * midvol
-        low_volatility = lower + (upper - lower) * lowvol
-        
-        initial_centroids = np.array([high_volatility, medium_volatility, low_volatility])
-        
-        # Use custom K-means clustering that matches Pine Script behavior
-        centroids, remapped_labels = custom_kmeans(window, initial_centroids)
-        
-        high_vol_centroid, mid_vol_centroid, low_vol_centroid = centroids
-            
-        # Count points in each cluster
-        high_vol_size = np.sum(remapped_labels == 0)
-        mid_vol_size = np.sum(remapped_labels == 1)
-        low_vol_size = np.sum(remapped_labels == 2)
-        
-        # Determine current volatility's cluster
-        current_vol = volatility.iloc[i]
-        if pd.isna(current_vol):
-            continue
-            
-        distances = np.abs(current_vol - centroids)
-        cluster = np.argmin(distances)
-        assigned_centroid = centroids[cluster]
-        
-        # Store cluster info in dataframe
-        df.iloc[i, df.columns.get_loc('cluster')] = cluster
-        df.iloc[i, df.columns.get_loc('assigned_centroid')] = assigned_centroid
-        df.iloc[i, df.columns.get_loc('high_vol_centroid')] = high_vol_centroid
-        df.iloc[i, df.columns.get_loc('mid_vol_centroid')] = mid_vol_centroid
-        df.iloc[i, df.columns.get_loc('low_vol_centroid')] = low_vol_centroid
-        df.iloc[i, df.columns.get_loc('high_vol_size')] = high_vol_size
-        df.iloc[i, df.columns.get_loc('mid_vol_size')] = mid_vol_size
-        df.iloc[i, df.columns.get_loc('low_vol_size')] = low_vol_size
-        
-        # Determine cluster-specific multiplier
-        if cluster == 0:  # High volatility cluster
-            current_vol_multiplier = high_vol_multiplier
-        elif cluster == 1:  # Medium volatility cluster
-            current_vol_multiplier = mid_vol_multiplier
-        else:  # Low volatility cluster
-            current_vol_multiplier = low_vol_multiplier
-        
-        # Calculate SuperTrend with cluster-specific multiplier
-        calculate_supertrend_row(df, i, current_vol_multiplier, assigned_centroid, high, low, close)
-    
-    return df
-
-
-
-# =============================================================================
 def calculate_supertrend_row(df, i, factor, atr_value, high='High', low='Low', close='Close'):
     """
     Calculate Adaptive SuperTrend for a given row.
@@ -382,123 +255,144 @@ def calculate_supertrend_row(df, i, factor, atr_value, high='High', low='Low', c
     df.iloc[i, df.columns.get_loc('ADAPT_SUPERTs')] = final_upper_band
 
 
-
-
-# =============================================================================
-def generate_signals_reversed(df, supertrend_col, direction_col):
+def adaptive_supertrend(df, atr_len=10, factor=3.0, training_data_period=100, 
+                        highvol=0.75, midvol=0.5, lowvol=0.25,
+                        high_vol_multiplier=2.0, mid_vol_multiplier=3.0, low_vol_multiplier=4.0,
+                        high='High', low='Low', close='Close'):
     """
-    Generate buy and sell signals based on changes in the SuperTrend direction.
-    REVERSED: Buy when bearish trend starts, sell when bullish trend starts.
+    Machine Learning Adaptive SuperTrend Indicator 
     
     Parameters:
     -----------
     df : pandas.DataFrame
-        DataFrame with SuperTrend values.
-    supertrend_col : str
-        Column name for the SuperTrend value.
-    direction_col : str
-        Column name for the SuperTrend direction.
+        DataFrame with OHLC data
+    atr_len : int
+        ATR length for volatility calculation
+    factor : float
+        SuperTrend factor (fallback if cluster-specific multipliers not used)
+    training_data_period : int
+        Length of training data for custom k-means clustering
+    highvol : float
+        Initial high volatility percentile guess (0-1)
+    midvol : float
+        Initial medium volatility percentile guess (0-1)
+    lowvol : float
+        Initial low volatility percentile guess (0-1)
+    high_vol_multiplier : float
+        Multiplier for high volatility clusters
+    mid_vol_multiplier : float
+        Multiplier for medium volatility clusters
+    low_vol_multiplier : float
+        Multiplier for low volatility clusters
+    high, low, close : str
+        Column names for High, Low, Close prices
     
     Returns:
     --------
     pandas.DataFrame
-        DataFrame with additional columns for signals.
+        Original dataframe with additional columns for SuperTrend values
     """
     df = df.copy()
-    signal_col = f"{supertrend_col}_signal"
-    df[signal_col] = df[direction_col].diff()
     
-    # Buy signal: change from bullish to bearish (2 diff)
-    df[f"{supertrend_col}_buy"] = np.where(df[signal_col] == 2, 1, 0)
-    # Sell signal: change from bearish to bullish (-2 diff)
-    df[f"{supertrend_col}_sell"] = np.where(df[signal_col] == -2, 1, 0)
+    # Calculate ATR (Average True Range)
+    tr1 = df[high] - df[low]
+    tr2 = abs(df[high] - df[close].shift())
+    tr3 = abs(df[low] - df[close].shift())
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    volatility = tr.rolling(window=atr_len).mean()  # ATR
+    
+    # Initialize columns
+    df['volatility'] = volatility
+    df['cluster'] = np.nan
+    df['assigned_centroid'] = np.nan
+    df['high_vol_centroid'] = np.nan
+    df['mid_vol_centroid'] = np.nan
+    df['low_vol_centroid'] = np.nan
+    df['high_vol_size'] = np.nan
+    df['mid_vol_size'] = np.nan
+    df['low_vol_size'] = np.nan
+    
+    # Initialize SuperTrend columns (Pine Script convention)
+    df['ADAPT_SUPERT'] = np.nan    # Trend value
+    df['ADAPT_SUPERTd'] = np.nan   # Direction (-1 for bullish, 1 for bearish in Pine)
+    df['ADAPT_SUPERTl'] = np.nan   # Long band
+    df['ADAPT_SUPERTs'] = np.nan   # Short band
+    df['upper_band'] = np.nan      # Upper band
+    df['lower_band'] = np.nan      # Lower band
+    
+    # Process data only after we have enough history for both ATR and training
+    first_valid_volatility = volatility.first_valid_index()
+    if first_valid_volatility is None:
+        raise ValueError("Not enough data to calculate ATR")
+    
+    # Get minimum start index considering both ATR warmup and training period
+    start_idx = max(
+        df.index.get_loc(first_valid_volatility),
+        training_data_period
+    )
+    
+    # Process data only after we have enough history
+    for i in range(start_idx, len(df)):
+        # Get training window
+        window = df['volatility'].iloc[i-training_data_period:i].dropna().values
+        
+        if len(window) < training_data_period * 0.9:  # Allow some missing values but ensure sufficient data
+            continue
+            
+        # Initial centroid estimates based on percentiles
+        upper = np.max(window)
+        lower = np.min(window)
+        
+        # Calculate initial centroids based on percentiles
+        high_volatility = lower + (upper - lower) * highvol
+        medium_volatility = lower + (upper - lower) * midvol
+        low_volatility = lower + (upper - lower) * lowvol
+        
+        initial_centroids = np.array([high_volatility, medium_volatility, low_volatility])
+        
+        # Use custom K-means clustering that matches Pine Script behavior
+        centroids, remapped_labels = custom_kmeans(window, initial_centroids)
+        
+        # After sorting, cluster 0 = highest volatility, 2 = lowest
+        high_vol_centroid, mid_vol_centroid, low_vol_centroid = centroids
+            
+        # Count points in each cluster
+        high_vol_size = np.sum(remapped_labels == 0)
+        mid_vol_size = np.sum(remapped_labels == 1)
+        low_vol_size = np.sum(remapped_labels == 2)
+        
+        # Determine current volatility's cluster
+        current_vol = volatility.iloc[i]
+        if pd.isna(current_vol):
+            continue
+            
+        distances = np.abs(current_vol - centroids)
+        cluster = np.argmin(distances)
+        assigned_centroid = centroids[cluster]
+        
+        # Store cluster info in dataframe
+        df.iloc[i, df.columns.get_loc('cluster')] = cluster
+        df.iloc[i, df.columns.get_loc('assigned_centroid')] = assigned_centroid
+        df.iloc[i, df.columns.get_loc('high_vol_centroid')] = high_vol_centroid
+        df.iloc[i, df.columns.get_loc('mid_vol_centroid')] = mid_vol_centroid
+        df.iloc[i, df.columns.get_loc('low_vol_centroid')] = low_vol_centroid
+        df.iloc[i, df.columns.get_loc('high_vol_size')] = high_vol_size
+        df.iloc[i, df.columns.get_loc('mid_vol_size')] = mid_vol_size
+        df.iloc[i, df.columns.get_loc('low_vol_size')] = low_vol_size
+        
+        # Determine cluster-specific multiplier
+        # Cluster 0 = highest volatility, 1 = medium volatility, 2 = lowest volatility
+        if cluster == 0:  # High volatility cluster
+            current_vol_multiplier = high_vol_multiplier
+        elif cluster == 1:  # Medium volatility cluster
+            current_vol_multiplier = mid_vol_multiplier
+        else:  # Low volatility cluster
+            current_vol_multiplier = low_vol_multiplier
+        
+        # Calculate SuperTrend with cluster-specific multiplier
+        calculate_supertrend_row(df, i, current_vol_multiplier, assigned_centroid, high, low, close)
     
     return df
-
-# =============================================================================
-def backtest_supertrend(df, supertrend_col, buy_col, sell_col, close='Close', initial_capital=100000, transaction_cost_pct=0.1):
-    """
-    Perform a simple backtest based on the SuperTrend buy and sell signals with transaction costs.
-    
-    Parameters:
-    -----------
-    df : pandas.DataFrame
-        DataFrame with price and signal data.
-    supertrend_col : str
-        Base column name for the SuperTrend strategy (used for naming the portfolio column).
-    buy_col : str
-        Column name for buy signals.
-    sell_col : str
-        Column name for sell signals.
-    close : str
-        Column name for closing prices.
-    initial_capital : float
-        Initial capital for the backtest.
-    transaction_cost_pct : float
-        Transaction cost percentage (e.g., 0.1 for 0.1%).
-        
-    Returns:
-    --------
-    df : pandas.DataFrame
-        DataFrame with added portfolio value column.
-    metrics : dict
-        Dictionary with backtest metrics.
-    """
-    df = df.copy()
-    portfolio_col = f'{supertrend_col}_portfolio'  # Unique column name per strategy
-    df[portfolio_col] = float(initial_capital)  # Initialize as float
-    
-    in_position = False
-    shares = 0
-    cash = float(initial_capital)
-    entry_price = 0
-    total_trades = 0
-    winning_trades = 0
-    losing_trades = 0
-    
-    for i in range(len(df)):
-        if df[buy_col].iloc[i] == 1 and not in_position:
-            entry_price = df[close].iloc[i]
-            transaction_cost = entry_price * shares * transaction_cost_pct / 100
-            shares = (cash - transaction_cost) / entry_price
-            cash = 0.0
-            in_position = True
-            total_trades += 1
-        elif df[sell_col].iloc[i] == 1 and in_position:
-            exit_price = df[close].iloc[i]
-            transaction_cost = exit_price * shares * transaction_cost_pct / 100
-            cash = shares * exit_price - transaction_cost
-            
-            # Track trade performance
-            if exit_price > entry_price:
-                winning_trades += 1
-            elif exit_price < entry_price:
-                losing_trades += 1
-                
-            shares = 0.0
-            in_position = False
-        
-        # Update portfolio value
-        df.loc[df.index[i], portfolio_col] = cash + shares * df[close].iloc[i]
-    
-    # Calculate metrics
-    initial_price = df[close].iloc[0]
-    final_price = df[close].iloc[-1]
-    buy_hold_return = (final_price / initial_price - 1) * 100
-    strategy_return = (df[portfolio_col].iloc[-1] / initial_capital - 1) * 100
-    win_rate = winning_trades / total_trades * 100 if total_trades > 0 else 0
-    
-    return df, {
-        'final_capital': df[portfolio_col].iloc[-1],
-        'total_return': strategy_return,
-        'buy_hold_return': buy_hold_return,
-        'total_trades': total_trades,
-        'win_rate': win_rate
-    }
-
-
-
-
 
 
 def generate_signals(df, supertrend_col, direction_col):
@@ -544,15 +438,99 @@ def generate_signals(df, supertrend_col, direction_col):
     return df
 
 
-
+def backtest_supertrend(df, supertrend_col, buy_col, sell_col, close='Close', initial_capital=100000, transaction_cost_pct=0.1):
+    """
+    Perform a simple backtest based on the SuperTrend buy and sell signals with transaction costs.
+    
+    Parameters:
+    -----------
+    df : pandas.DataFrame
+        DataFrame with price and signal data.
+    supertrend_col : str
+        Base column name for the SuperTrend strategy (used for naming the portfolio column).
+    buy_col : str
+        Column name for buy signals.
+    sell_col : str
+        Column name for sell signals.
+    close : str
+        Column name for closing prices.
+    initial_capital : float
+        Initial capital for the backtest.
+    transaction_cost_pct : float
+        Transaction cost percentage (e.g., 0.1 for 0.1%).
+        
+    Returns:
+    --------
+    df : pandas.DataFrame
+        DataFrame with added portfolio value column.
+    metrics : dict
+        Dictionary with backtest metrics.
+    """
+    df = df.copy()
+    portfolio_col = f'{supertrend_col}_portfolio'  # Unique column name per strategy
+    df[portfolio_col] = float(initial_capital)  # Initialize as float
+    
+    in_position = False
+    shares = 0
+    cash = float(initial_capital)
+    entry_price = 0
+    total_trades = 0
+    winning_trades = 0
+    losing_trades = 0
+    
+    for i in range(len(df)):
+        current_price = df[close].iloc[i]
+        
+        if df[buy_col].iloc[i] == 1 and not in_position:
+            # FIXED: Calculate maximum shares considering transaction cost
+            entry_price = current_price
+            total_cost_per_share = entry_price * (1 + transaction_cost_pct/100)
+            shares = cash / total_cost_per_share  # Uses all available cash
+            transaction_cost = shares * entry_price * transaction_cost_pct/100
+            
+            cash = 0.0
+            in_position = True
+            total_trades += 1
+            
+        elif df[sell_col].iloc[i] == 1 and in_position:
+            exit_price = current_price
+            transaction_cost = shares * exit_price * transaction_cost_pct/100
+            cash = shares * exit_price - transaction_cost
+            
+            # Track trade performance
+            if exit_price > entry_price:
+                winning_trades += 1
+            elif exit_price < entry_price:
+                losing_trades += 1
+                
+            shares = 0.0
+            in_position = False
+        
+        # Update portfolio value
+        df.loc[df.index[i], portfolio_col] = cash + shares * current_price
+    
+    # Calculate metrics
+    initial_price = df[close].iloc[0]
+    final_price = df[close].iloc[-1]
+    buy_hold_return = (final_price / initial_price - 1) * 100
+    strategy_return = (df[portfolio_col].iloc[-1] / initial_capital - 1) * 100
+    win_rate = winning_trades / total_trades * 100 if total_trades > 0 else 0
+    
+    return df, {
+        'final_capital': df[portfolio_col].iloc[-1],
+        'total_return': strategy_return,
+        'buy_hold_return': buy_hold_return,
+        'total_trades': total_trades,
+        'win_rate': win_rate
+    }
 
 
 def supertrend_strategy_comparison(ticker, days=700, 
-                                        high_vol_multiplier=3, 
-                                        mid_vol_multiplier=2, 
-                                        low_vol_multiplier=1,
-                                        transaction_cost_pct=0.1,
-                                        reversed_signals=False):
+                                   high_vol_multiplier=3, 
+                                   mid_vol_multiplier=2, 
+                                   low_vol_multiplier=1,
+                                   transaction_cost_pct=0.1,
+                                   reversed_signals=False):
     """
     Compare Traditional and Adaptive SuperTrend strategies with correctly generated signals.
     
@@ -591,9 +569,9 @@ def supertrend_strategy_comparison(ticker, days=700,
     
     # Adaptive SuperTrend
     df = adaptive_supertrend(df,
-                           high_vol_multiplier=high_vol_multiplier,
-                           mid_vol_multiplier=mid_vol_multiplier,
-                           low_vol_multiplier=low_vol_multiplier)
+                            high_vol_multiplier=high_vol_multiplier,
+                            mid_vol_multiplier=mid_vol_multiplier,
+                            low_vol_multiplier=low_vol_multiplier)
     df = generate_signals(df, 'ADAPT_SUPERT', 'ADAPT_SUPERTd')
     
     # Reverse signals if requested (opposite of standard trend-following)
@@ -608,14 +586,14 @@ def supertrend_strategy_comparison(ticker, days=700,
     
     # Run backtest for both strategies
     df, trad_metrics = backtest_supertrend(df, trad_prefix, 
-                                                  f'{trad_prefix}_buy', 
-                                                  f'{trad_prefix}_sell',
-                                                  transaction_cost_pct=transaction_cost_pct)
+                                           f'{trad_prefix}_buy', 
+                                           f'{trad_prefix}_sell',
+                                           transaction_cost_pct=transaction_cost_pct)
     
     df, adapt_metrics = backtest_supertrend(df, 'ADAPT_SUPERT', 
-                                                   'ADAPT_SUPERT_buy', 
-                                                   'ADAPT_SUPERT_sell',
-                                                   transaction_cost_pct=transaction_cost_pct)
+                                            'ADAPT_SUPERT_buy', 
+                                            'ADAPT_SUPERT_sell',
+                                            transaction_cost_pct=transaction_cost_pct)
     
     # Create plot to visualize results
     plot_df = df.dropna(subset=['ADAPT_SUPERT']).copy()

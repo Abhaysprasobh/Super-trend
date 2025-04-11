@@ -14,43 +14,40 @@ import {
 } from "recharts";
 
 // Custom dot for Buy/Sell signals
-const CustomSignalDot = (props) => {
-  const { cx, cy, payload } = props;
-  if (payload.up1 === 1) {
-    return (
-      <text
-        x={cx}
-        y={cy}
-        dy={-10}
-        textAnchor="middle"
-        fill="green"
-        fontSize={20}
-      >
-        ▲
-      </text>
-    );
-  } else if (payload.up1 === 0) {
-    return (
-      <text x={cx} y={cy} dy={10} textAnchor="middle" fill="red" fontSize={20}>
-        ▼
-      </text>
-    );
-  }
-  return null;
-};
+  const CustomSignalDot = (props) => {
+    const { cx, cy, payload } = props;
+    if (payload.up1 === 1) {
+      return (
+        <text
+          x={cx}
+          y={cy}
+          dy={-10}
+          textAnchor="middle"
+          fill="green"
+          fontSize={20}
+        >
+          ▲
+        </text>
+      );
+    } else if (payload.up1 === 0) {
+      return (
+        <text x={cx} y={cy} dy={10} textAnchor="middle" fill="red" fontSize={20}>
+          ▼
+        </text>
+      );
+    }
+    return null;
+  };
 
 export default function AdaptiveSupertrendPage() {
   const [formData, setFormData] = useState({
-    ticker: "RELIANCE.NS",
-    atr_len: 10,
-    factor: 3.0,
+    ticker: "AAPL",
+    atr_len: 14,
     training_data_period: 100,
-    highvol: 0.75,
-    midvol: 0.5,
-    lowvol: 0.25,
-    high_multiplier: 2.0,
+
+    high_multiplier: 4.0,
     mid_multiplier: 3.0,
-    low_multiplier: 4.0,
+    low_multiplier: 2.0,
     days: 700,
   });
 

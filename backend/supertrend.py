@@ -155,64 +155,80 @@ def plot_standard_supertrend(stock_name, df, length=7, multiplier=3.0, fill_alph
 
 def get_supertrend_data(ticker: str, interval: str = "1d", days: int = 700, length: int = 7, multiplier: float = 3.0):
     """
-    Get SuperTrend data for a given ticker and return as JSON.
-    
+    Get SuperTrend data for a given ticker and return as JSON with buy/sell signals.
+
     Parameters:
     -----------
     ticker : str
         Stock ticker symbol
     interval : str
         interval of stock
+    days : int
+        Number of historical days to fetch
     length : int
         SuperTrend length parameter
     multiplier : float
         SuperTrend multiplier parameter
-    
+
     Returns:
     --------
     dict
-        JSON-compatible dictionary with SuperTrend data
+        JSON-compatible dictionary with SuperTrend data and signals
     """
-
     try:
-        # Get historical data (assuming historical_data function exists)
         from analysis import historical_data
         df = historical_data(ticker, interval, days)
-        
+
         # Calculate SuperTrend
         result = supertrend(df, length=length, multiplier=multiplier)
-        
-        # Get the relevant columns
+
         suffix = f"_{length}_{multiplier}"
         trend_col = f"SUPERT{suffix}"
         dir_col = f"SUPERTd{suffix}"
-        
-        # Create response data
+
         response_data = {
             'ticker': ticker,
             'data': []
         }
-        
-        # Convert DataFrame to list of dictionaries
+
+        prev_direction = None
         for index, row in result.iterrows():
-            if pd.notna(row[trend_col]):  # Only include non-NaN values
+            if pd.notna(row[trend_col]):
+                current_direction = int(row[dir_col])
+                signal = None
+                is_buy = False
+                is_sell = False
+
+                if prev_direction is not None:
+                    if current_direction == 1 and prev_direction == -1:
+                        signal = "buy"
+                        is_buy = True
+                    elif current_direction == -1 and prev_direction == 1:
+                        signal = "sell"
+                        is_sell = True
+                prev_direction = current_direction
+
                 data_point = {
                     'date': index.strftime('%Y-%m-%d'),
                     'supertrend': float(row[trend_col]),
-                    'direction': int(row[dir_col]),
-                    'close': float(row['Close'])
+                    'direction': current_direction,
+                    'close': float(row['Close']),
+                    'signal': signal,
+                    'is_buy': is_buy,
+                    'is_sell': is_sell
                 }
+
                 response_data['data'].append(data_point)
-        
+
         return response_data
-        
+
     except Exception as e:
         return {
             'error': str(e),
             'ticker': ticker,
             'data': []
         }
-  
+
 
 # Example usage on historical data:
 if __name__ == '__main__':
