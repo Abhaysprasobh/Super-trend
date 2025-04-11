@@ -524,7 +524,6 @@ def backtest_supertrend(df, supertrend_col, buy_col, sell_col, close='Close', in
         'win_rate': win_rate
     }
 
-
 def supertrend_strategy_comparison(ticker, days=700, 
                                    high_vol_multiplier=3, 
                                    mid_vol_multiplier=2, 
@@ -574,30 +573,31 @@ def supertrend_strategy_comparison(ticker, days=700,
                             low_vol_multiplier=low_vol_multiplier)
     df = generate_signals(df, 'ADAPT_SUPERT', 'ADAPT_SUPERTd')
     
+    # Filter the dataframe to keep only rows where Adaptive SuperTrend has values
+    plot_df = df.dropna(subset=['ADAPT_SUPERT']).copy()
+    
     # Reverse signals if requested (opposite of standard trend-following)
     if reversed_signals:
         # Swap buy and sell signals
         for prefix in [trad_prefix, 'ADAPT_SUPERT']:
             buy_col = f"{prefix}_buy"
             sell_col = f"{prefix}_sell"
-            temp = df[buy_col].copy()
-            df[buy_col] = df[sell_col]
-            df[sell_col] = temp
+            temp = plot_df[buy_col].copy()
+            plot_df[buy_col] = plot_df[sell_col]
+            plot_df[sell_col] = temp
     
-    # Run backtest for both strategies
-    df, trad_metrics = backtest_supertrend(df, trad_prefix, 
+    # Run backtest for both strategies on the filtered data
+    plot_df, trad_metrics = backtest_supertrend(plot_df, trad_prefix, 
                                            f'{trad_prefix}_buy', 
                                            f'{trad_prefix}_sell',
                                            transaction_cost_pct=transaction_cost_pct)
     
-    df, adapt_metrics = backtest_supertrend(df, 'ADAPT_SUPERT', 
+    plot_df, adapt_metrics = backtest_supertrend(plot_df, 'ADAPT_SUPERT', 
                                             'ADAPT_SUPERT_buy', 
                                             'ADAPT_SUPERT_sell',
                                             transaction_cost_pct=transaction_cost_pct)
     
     # Create plot to visualize results
-    plot_df = df.dropna(subset=['ADAPT_SUPERT']).copy()
-    
     fig = plt.figure(figsize=(16, 20))
     
     # Define GridSpec for layout
@@ -738,9 +738,7 @@ def supertrend_strategy_comparison(ticker, days=700,
     print(f"Traditional SuperTrend Signals: {buy_trad.shape[0]} buy, {sell_trad.shape[0]} sell")
     print(f"Adaptive SuperTrend Signals: {buy_adapt.shape[0]} buy, {sell_adapt.shape[0]} sell")
     plt.show()
-    return fig, df
-
-
+    return fig, plot_df
 
 def get_supertrend_strategy_data(ticker, days=700, 
                                  high_vol_multiplier=3, 
@@ -866,4 +864,5 @@ if __name__ == '__main__':
                                         mid_vol_multiplier=2.0, 
                                         low_vol_multiplier=1.0,
                                         reversed_signals=True)
+    supertrend_strategy_comparison("RELIANCE.NS")
     # print(data)
