@@ -532,6 +532,7 @@ def supertrend_strategy_comparison(ticker, days=700,
                                    reversed_signals=False):
     """
     Compare Traditional and Adaptive SuperTrend strategies with correctly generated signals.
+    Displays each strategy with detailed performance metrics and portfolio comparison.
     
     Parameters:
     -----------
@@ -598,147 +599,143 @@ def supertrend_strategy_comparison(ticker, days=700,
                                             transaction_cost_pct=transaction_cost_pct)
     
     # Create plot to visualize results
-    fig = plt.figure(figsize=(16, 20))
+    fig = plt.figure(figsize=(18, 20))
     
     # Define GridSpec for layout
-    gs = plt.GridSpec(5, 4, figure=fig)
-    
-    # Main price chart with SuperTrend lines
-    ax1 = fig.add_subplot(gs[0:2, :])
-    ax1.plot(plot_df.index, plot_df['Close'], label='Close Price', color='black', alpha=0.8)
-    ax1.plot(plot_df.index, plot_df[f'{trad_prefix}_value'], label=f'Traditional ST {high_vol_multiplier}x', 
-             color='blue', alpha=0.7)
-    ax1.plot(plot_df.index, plot_df['ADAPT_SUPERT'], label='Adaptive ST', color='red', alpha=0.7)
-    
-    # Buy signals
-    buy_trad = plot_df[plot_df[f'{trad_prefix}_buy'] == 1]
-    buy_adapt = plot_df[plot_df['ADAPT_SUPERT_buy'] == 1]
-    
-    if not buy_trad.empty:
-        ax1.scatter(buy_trad.index, buy_trad['Close'] * 0.99,
-                   marker='^', color='green', s=100, label='Traditional ST Buy')
-    
-    if not buy_adapt.empty:
-        ax1.scatter(buy_adapt.index, buy_adapt['Close'] * 0.98,
-                   marker='^', color='darkgreen', s=120, label='Adaptive ST Buy')
-    
-    # Sell signals
-    sell_trad = plot_df[plot_df[f'{trad_prefix}_sell'] == 1]
-    sell_adapt = plot_df[plot_df['ADAPT_SUPERT_sell'] == 1]
-    
-    if not sell_trad.empty:
-        ax1.scatter(sell_trad.index, sell_trad['Close'] * 1.01,
-                   marker='v', color='red', s=100, label='Traditional ST Sell')
-    
-    if not sell_adapt.empty:
-        ax1.scatter(sell_adapt.index, sell_adapt['Close'] * 1.02,
-                   marker='v', color='darkred', s=120, label='Adaptive ST Sell')
+    gs = plt.GridSpec(4, 2, figure=fig, height_ratios=[2, 1, 1, 1])
     
     signal_mode = "Reversed (Buy on Bearish, Sell on Bullish)" if reversed_signals else "Standard (Buy on Bullish, Sell on Bearish)"
-    ax1.set_title(f"SuperTrend Comparison for {ticker} - {signal_mode}", fontsize=16)
-    ax1.set_ylabel("Price", fontsize=12)
-    ax1.grid(True, alpha=0.3)
-    ax1.legend(loc='upper left')
+    fig.suptitle(f"SuperTrend Strategy Comparison for {ticker} - {signal_mode}", fontsize=20)
     
-    # Portfolio performance
-    ax2 = fig.add_subplot(gs[2, :])
-    ax2.plot(plot_df.index, plot_df[f'{trad_prefix}_portfolio'], label='Traditional ST Portfolio', color='blue')
-    ax2.plot(plot_df.index, plot_df['ADAPT_SUPERT_portfolio'], label='Adaptive ST Portfolio', color='red')
+    # Common styling function for price charts
+    def style_price_chart(ax, title):
+        ax.set_title(title, fontsize=14)
+        ax.set_ylabel("Price", fontsize=12)
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc='upper left')
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+        plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
     
-    # Add buy-hold portfolio for comparison
-    if 'buy_hold' not in plot_df.columns:
-        initial_capital = 100000
-        plot_df['buy_hold'] = initial_capital * (plot_df['Close'] / plot_df['Close'].iloc[0])
-    ax2.plot(plot_df.index, plot_df['buy_hold'], label='Buy & Hold', color='purple', linestyle='--')
+    # ---- Price Charts with Signals (Top Row) ----
     
-    ax2.set_title("Portfolio Performance", fontsize=14)
-    ax2.set_ylabel("Portfolio Value ($)", fontsize=12)
-    ax2.grid(True, alpha=0.3)
-    ax2.legend(loc='upper left')
+    # Traditional SuperTrend Chart
+    ax_trad = fig.add_subplot(gs[0, 0])
+    ax_trad.plot(plot_df.index, plot_df['Close'], label='Close Price', color='black', alpha=0.8)
+    ax_trad.plot(plot_df.index, plot_df[f'{trad_prefix}_value'], label=f'Traditional ST {high_vol_multiplier}x', 
+                color='blue', alpha=0.7)
     
-    # Volatility clusters
-    ax3 = fig.add_subplot(gs[3, :])
+    # Buy and sell signals for Traditional
+    buy_trad = plot_df[plot_df[f'{trad_prefix}_buy'] == 1]
+    sell_trad = plot_df[plot_df[f'{trad_prefix}_sell'] == 1]
+    
+    if not buy_trad.empty:
+        ax_trad.scatter(buy_trad.index, buy_trad['Close'] * 0.99,
+                       marker='^', color='green', s=100, label='Buy Signal')
+    
+    if not sell_trad.empty:
+        ax_trad.scatter(sell_trad.index, sell_trad['Close'] * 1.01,
+                       marker='v', color='red', s=100, label='Sell Signal')
+    
+    style_price_chart(ax_trad, f"Traditional SuperTrend ({high_vol_multiplier}x)")
+    
+    # Adaptive SuperTrend Chart
+    ax_adapt = fig.add_subplot(gs[0, 1])
+    ax_adapt.plot(plot_df.index, plot_df['Close'], label='Close Price', color='black', alpha=0.8)
+    ax_adapt.plot(plot_df.index, plot_df['ADAPT_SUPERT'], label='Adaptive ST', color='red', alpha=0.7)
+    
+    # Buy and sell signals for Adaptive
+    buy_adapt = plot_df[plot_df['ADAPT_SUPERT_buy'] == 1]
+    sell_adapt = plot_df[plot_df['ADAPT_SUPERT_sell'] == 1]
+    
+    if not buy_adapt.empty:
+        ax_adapt.scatter(buy_adapt.index, buy_adapt['Close'] * 0.99,
+                        marker='^', color='green', s=100, label='Buy Signal')
+    
+    if not sell_adapt.empty:
+        ax_adapt.scatter(sell_adapt.index, sell_adapt['Close'] * 1.01,
+                        marker='v', color='red', s=100, label='Sell Signal')
+    
+    style_price_chart(ax_adapt, "Adaptive SuperTrend")
+    
+    # ---- Volatility Clustering Analysis (Middle Row) ----
+    
+    ax_vol = fig.add_subplot(gs[1, :])
     colors = {0: 'red', 1: 'orange', 2: 'green'}
     cluster_labels = {0: 'High Volatility', 1: 'Medium Volatility', 2: 'Low Volatility'}
     
     # Plot the volatility line
-    ax3.plot(plot_df.index, plot_df['volatility'], color='gray', alpha=0.4, label='ATR Volatility')
+    ax_vol.plot(plot_df.index, plot_df['volatility'], color='gray', alpha=0.7, label='ATR Volatility')
     
     # Plot the centroids as horizontal lines
     valid_centroids = plot_df[['high_vol_centroid', 'mid_vol_centroid', 'low_vol_centroid']].iloc[-1]
     for i, (centroid_name, centroid_value) in enumerate(valid_centroids.items()):
         if pd.notna(centroid_value):
-            ax3.axhline(y=centroid_value, color=colors[i], linestyle='--', alpha=0.7,
-                       label=f"{cluster_labels[i]} Centroid: {centroid_value:.5f}")
+            ax_vol.axhline(y=centroid_value, color=colors[i], linestyle='--', alpha=0.7,
+                        label=f"{cluster_labels[i]} Centroid: {centroid_value:.5f}")
     
     # Color the points by cluster
     for cluster in [0, 1, 2]:
         cluster_df = plot_df[plot_df['cluster'] == cluster].dropna(subset=['volatility'])
         if not cluster_df.empty:
-            ax3.scatter(cluster_df.index, cluster_df['volatility'], 
-                       color=colors.get(cluster, 'gray'), alpha=0.7, 
-                       label=f'Cluster {cluster}: {cluster_labels[cluster]}')
+            ax_vol.scatter(cluster_df.index, cluster_df['volatility'], 
+                        color=colors.get(cluster, 'gray'), alpha=0.7, 
+                        label=f'Cluster {cluster}: {cluster_labels[cluster]}')
     
-    ax3.set_title("Volatility Clusters", fontsize=14)
-    ax3.set_ylabel("ATR Volatility", fontsize=12)
-    ax3.grid(True, alpha=0.3)
-    ax3.legend(loc='upper left')
+    ax_vol.set_title("Volatility Clustering Analysis", fontsize=14)
+    ax_vol.set_ylabel("ATR Volatility", fontsize=12)
+    ax_vol.grid(True, alpha=0.3)
+    ax_vol.legend(loc='upper left')
+    ax_vol.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    plt.setp(ax_vol.get_xticklabels(), rotation=45, ha='right')
     
-    # Direction and Multiplier chart
-    ax4 = fig.add_subplot(gs[4, :])
+    # ---- Individual Strategy Performance (Third Row) ----
     
-    # Plot direction
-    ax4.plot(plot_df.index, plot_df[f'{trad_prefix}_d'], 
-             label='Traditional Direction', color='blue', drawstyle='steps-post', alpha=0.7)
-    ax4.plot(plot_df.index, plot_df['ADAPT_SUPERTd'], 
-             label='Adaptive Direction', color='red', drawstyle='steps-post', alpha=0.7)
+    # Add buy-hold portfolio for comparison if not already present
+    if 'buy_hold' not in plot_df.columns:
+        initial_capital = 100000
+        plot_df['buy_hold'] = initial_capital * (plot_df['Close'] / plot_df['Close'].iloc[0])
     
-    # Set y-axis limits to show direction clearly
-    ax4.set_ylim(-1.5, 1.5)
+    # Traditional Strategy Performance
+    ax_trad_perf = fig.add_subplot(gs[2, 0])
+    ax_trad_perf.plot(plot_df.index, plot_df[f'{trad_prefix}_portfolio'], 
+                     label='Traditional ST Portfolio', color='blue')
+    ax_trad_perf.plot(plot_df.index, plot_df['buy_hold'], 
+                     label='Buy & Hold', color='purple', linestyle='--')
     
-    # Add reference line at y=0
-    ax4.axhline(y=0, color='black', linestyle='-', alpha=0.2)
+    ax_trad_perf.set_title("Traditional SuperTrend Performance", fontsize=14)
+    ax_trad_perf.set_ylabel("Portfolio Value ($)", fontsize=12)
+    ax_trad_perf.grid(True, alpha=0.3)
+    ax_trad_perf.legend(loc='upper left')
+    ax_trad_perf.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    plt.setp(ax_trad_perf.get_xticklabels(), rotation=45, ha='right')
     
-    ax4.set_title("SuperTrend Direction (-1: Bullish, 1: Bearish)", fontsize=14)
-    ax4.set_ylabel("Direction", fontsize=12)
-    ax4.set_yticks([-1, 1])
-    ax4.set_yticklabels(['Bullish (-1)', 'Bearish (1)'])
-    ax4.grid(True, alpha=0.3)
-    ax4.legend(loc='upper left')
+    # Adaptive Strategy Performance
+    ax_adapt_perf = fig.add_subplot(gs[2, 1])
+    ax_adapt_perf.plot(plot_df.index, plot_df['ADAPT_SUPERT_portfolio'], 
+                      label='Adaptive ST Portfolio', color='red')
+    ax_adapt_perf.plot(plot_df.index, plot_df['buy_hold'], 
+                      label='Buy & Hold', color='purple', linestyle='--')
     
-    # Format x-axis dates
-    for ax in [ax1, ax2, ax3, ax4]:
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-        plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
+    ax_adapt_perf.set_title("Adaptive SuperTrend Performance", fontsize=14)
+    ax_adapt_perf.set_ylabel("Portfolio Value ($)", fontsize=12)
+    ax_adapt_perf.grid(True, alpha=0.3)
+    ax_adapt_perf.legend(loc='upper left')
+    ax_adapt_perf.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    plt.setp(ax_adapt_perf.get_xticklabels(), rotation=45, ha='right')
     
-    # Add text box with performance metrics
-    perf_text = (
-        f"Traditional SuperTrend ({high_vol_multiplier}x):\n"
-        f"  Final Capital: ${trad_metrics['final_capital']:.2f}\n"
-        f"  Total Return: {trad_metrics['total_return']:.2f}%\n"
-        f"  Win Rate: {trad_metrics['win_rate']:.2f}%\n"
-        f"  Total Trades: {trad_metrics['total_trades']}\n\n"
-        f"Adaptive SuperTrend:\n"
-        f"  Final Capital: ${adapt_metrics['final_capital']:.2f}\n"
-        f"  Total Return: {adapt_metrics['total_return']:.2f}%\n"
-        f"  Win Rate: {adapt_metrics['win_rate']:.2f}%\n"
-        f"  Total Trades: {adapt_metrics['total_trades']}\n\n"
-        f"Buy & Hold Return: {trad_metrics['buy_hold_return']:.2f}%\n"
-        f"Transaction Cost: {transaction_cost_pct}%\n"
-        f"Signal Mode: {signal_mode}\n"
-        f"Volatility Multipliers: {high_vol_multiplier}x (high), {mid_vol_multiplier}x (mid), {low_vol_multiplier}x (low)"
-    )
+    # ---- Direct Strategy Comparison (Bottom Row) ----
     
-    fig.text(0.05, 0.01, perf_text, fontsize=10, 
-             bbox=dict(facecolor='white', alpha=0.8, boxstyle='round,pad=0.5'))
+    ax_comp = fig.add_subplot(gs[3, :])
+    ax_comp.plot(plot_df.index, plot_df[f'{trad_prefix}_portfolio'], 
+               label='Traditional SuperTrend', color='blue')
+    ax_comp.plot(plot_df.index, plot_df['ADAPT_SUPERT_portfolio'], 
+               label='Adaptive SuperTrend', color='red')
+    ax_comp.plot(plot_df.index, plot_df['buy_hold'], 
+               label='Buy & Hold', color='purple', linestyle='--')
     
-    plt.tight_layout()
-    plt.subplots_adjust(bottom=0.15)  # Make room for text box
-    
-    print(f"Traditional SuperTrend Signals: {buy_trad.shape[0]} buy, {sell_trad.shape[0]} sell")
-    print(f"Adaptive SuperTrend Signals: {buy_adapt.shape[0]} buy, {sell_adapt.shape[0]} sell")
-    plt.show()
-    return fig, plot_df
+    ax_comp.set_title("Direct Strategy Performance Comparison", fontsize=14)
+    ax_comp.set_ylabel("Portfolio Value ($)", fontsize=12)
+
 
 def get_supertrend_strategy_data(ticker, days=700, 
                                  high_vol_multiplier=3, 
@@ -859,10 +856,9 @@ if __name__ == '__main__':
     # Display comparison plot
     # fig, df = supertrend_strategy_comparison("RELIANCE.NS")
     # Generate JSON-like strategy data
-    data = get_supertrend_strategy_data("RELIANCE.NS", days=700, 
-                                        high_vol_multiplier=3.0, 
-                                        mid_vol_multiplier=2.0, 
-                                        low_vol_multiplier=1.0,
-                                        reversed_signals=True)
-    supertrend_strategy_comparison("RELIANCE.NS")
-    # print(data)
+    # data = get_supertrend_strategy_data("RELIANCE.NS", days=700, 
+    #                                     high_vol_multiplier=3.0, 
+    #                                     mid_vol_multiplier=2.0, 
+    #                                     low_vol_multiplier=1.0,
+    #                                     reversed_signals=True)
+    supertrend_strategy_comparison("AAPL")
