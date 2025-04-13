@@ -56,7 +56,7 @@ def supertrend(df, length=7, multiplier=3.0, high='High', low='Low', close='Clos
     df[f"SUPERTl{suffix}"] = trend.where(direction == 1)
     df[f"SUPERTs{suffix}"] = trend.where(direction == -1)
     return df
-def plot_standard_supertrend(stock_name, df, length=7, multiplier=3.0, fill_alpha=0.25):
+def plot_standard_supertrend(stock_name, df, length=14, multiplier=3.0, fill_alpha=0.25):
     """
     Plot standard SuperTrend as a single continuous line, color-coded by trend direction.
 
@@ -233,15 +233,16 @@ def get_supertrend_data(ticker: str, interval: str = "1d", days: int = 700, leng
 # Example usage on historical data:
 if __name__ == '__main__':
     from analysis import historical_data
-    stock_name = 'AAPL'
-    data = historical_data(stock_name, '1d', 700)
+    stock_name = 'GOLDBEES.NS'
+    data = historical_data(stock_name, '1d', 600)
 
-    result = supertrend(data, length=7, multiplier=3.0, append=True)
-    result.to_excel(f'{stock_name}_supertrend.xlsx')
+
+    result = supertrend(data, length=14, multiplier=3.0, append=True)
+    # result.to_excel(f'{stock_name}_supertrend.xlsx')
     fig = plot_standard_supertrend(stock_name, result)
     plt.show()
 
     print(result)
     # Test the function
-    result = get_supertrend_data('AAPL', interval="1d", days=700, length=7, multiplier=3.0)
-    print(json.dumps(result, indent=2))
+    # result = get_supertrend_data('AAPL', interval="1d", days=700, length=7, multiplier=3.0)
+    # print(json.dumps(result, indent=2))
