@@ -117,9 +117,9 @@ export default function SupertrendPage() {
       {chartData.length > 0 && (
         <div className="mt-10 w-full max-w-6xl bg-white p-6 rounded-xl shadow">
           <h2 className="text-xl font-semibold mb-4">
-            Standard Supertrend Chart
+            Standard Supertrend Chart – {formData.ticker.toUpperCase()}
           </h2>
-          <ResponsiveContainer width="100%" height={400}>
+          <ResponsiveContainer width="100%" height={600}>
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="date" tick={{ fontSize: 12 }} />
@@ -142,6 +142,23 @@ export default function SupertrendPage() {
                 dataKey="supertrend"
                 stroke="#f97316"
                 name="Supertrend"
+                dot={false}
+              />
+
+              {/* Buy Signal (Legend only, gray) */}
+              <Line
+                type="monotone"
+                dataKey="is_buy"
+                stroke="#22c55e"
+                name="Uptrend"
+                dot={false}
+              />
+
+              {/* Sell Signal (Legend only, gray) */}
+              <Line
+                type="monotone"
+                stroke="#ef4444"
+                name="Down Trend"
                 dot={false}
               />
             </LineChart>
